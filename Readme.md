@@ -261,17 +261,20 @@ cd admin && npm run build
 ## 📸 Screenshots
 
 ### Student Dashboard
+
 ![Student Dashboard](screenshots/student-dashboard.png)
 
 ### Admin Panel
+
 ![Admin Panel](screenshots/admin-panel.png)
 
 ### User Management
+
 ![User Management](screenshots/user-management.png)
 
 ### Common Login
-![Admin Warden Login Page ](screenshots/admin-warden-login.png)
 
+![Admin Warden Login Page ](screenshots/admin-warden-login.png)
 
 ## 🤝 Contributing
 
@@ -287,7 +290,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Authors
 
-- **Your Name** - _Initial work_ - [YourGitHub](https://github.com/yourusername)
+- **Your Name** - _Initial work_ - [YourGitHub](https://github.com/Sudhanshu-SRS)
 
 ## 🙏 Acknowledgments
 
@@ -299,7 +302,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-For support, email support@smarthostel.com or create an issue in this repository.
+For support, email sudhanshusakhare808@gmail.com or create an issue in this repository.
 
 ## 🔗 Links
 
