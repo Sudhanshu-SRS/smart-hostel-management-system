@@ -258,6 +258,21 @@ cd admin && npm run build
 - Cloudinary integration
 - Secure file handling
 
+## 📸 Screenshots
+
+### Student Dashboard
+![Student Dashboard](screenshots/student-dashboard.png)
+
+### Admin Panel
+![Admin Panel](screenshots/admin-panel.png)
+
+### User Management
+![User Management](screenshots/user-management.png)
+
+### Common Login
+![Admin Warden Login Page ](screenshots/admin-warden-login.png)
+
+
 ## 🤝 Contributing
 
 1. Fork the repository
