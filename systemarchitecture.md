@@ -11,6 +11,38 @@
 7. [Security Architecture](#security-architecture)
 8. [Deployment Architecture](#deployment-architecture)
 
+## 📊 LIST OF FIGURES
+
+| Figure No. | Title                                                 | Page No. |
+| ---------- | ----------------------------------------------------- | -------- |
+| Figure 3.1 | System Architecture of Smart Hostel Management System | 4        |
+| Figure 3.2 | Workflow Diagram of SHMS                              | 4        |
+| Figure 3.3 | Entity Relationship (ER) Diagram of the Database      | 5        |
+| Figure 3.4 | Use Case Diagram Representing User Roles              | 5        |
+| Figure 4.1 | Login Interface for Student, Warden, and Admin        | 6        |
+| Figure 4.2 | Student Dashboard Interface                           | 6        |
+| Figure 4.3 | Room Booking and Allocation Module                    | 7        |
+| Figure 4.4 | Complaint Management Interface                        | 7        |
+| Figure 4.5 | Razorpay Payment Gateway Integration                  | 7        |
+| Figure 4.6 | Admin Analytics Dashboard                             | 8        |
+| Figure 4.7 | Visitor Entry and Verification Page                   | 8        |
+| Figure 5.1 | System Performance Graph                              | 9        |
+| Figure 5.2 | User Feedback Analysis Chart                          | 9        |
+| Figure 6.1 | Future AI-Driven Smart Allotment Concept Diagram      | 10       |
+
+## 📋 LIST OF TABLES
+
+| Table No. | Title                                                   | Page No. |
+| --------- | ------------------------------------------------------- | -------- |
+| Table 3.1 | Tools, Technologies, and Frameworks Used                | 4        |
+| Table 3.2 | Database Collections and Their Attributes               | 5        |
+| Table 4.1 | Module-Wise Implementation Summary                      | 6        |
+| Table 4.2 | API Endpoints and Functional Descriptions               | 7        |
+| Table 4.3 | Test Cases and Expected Results                         | 8        |
+| Table 5.1 | Quantitative System Performance Metrics                 | 9        |
+| Table 5.2 | User Satisfaction and Feedback Summary                  | 9        |
+| Table 6.1 | Comparison Between Traditional and Smart Hostel Systems | 10       |
+
 ---
 
 ## 🔍 System Overview
