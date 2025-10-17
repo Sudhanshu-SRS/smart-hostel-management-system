@@ -290,7 +290,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Authors
 
-- **Your Name** - _Initial work_ - [YourGitHub](https://github.com/Sudhanshu-SRS)
+- **Sudhanshu Ravindra Sakhare** - _Initial work_ - [YourGitHub](https://github.com/Sudhanshu-SRS)
 
 ## 🙏 Acknowledgments
 
