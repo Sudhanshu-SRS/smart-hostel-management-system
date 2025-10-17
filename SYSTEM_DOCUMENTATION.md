@@ -4,14 +4,15 @@
 
 1. [System Performance Graph](#system-performance-graph)
 2. [Future AI-Driven Smart Allotment Concept Diagram](#future-ai-driven-smart-allotment-concept-diagram)
-3. [Tools, Technologies, and Frameworks Used](#tools-technologies-and-frameworks-used)
-4. [Database Collections and Their Attributes](#database-collections-and-their-attributes)
-5. [Module-Wise Implementation Summary](#module-wise-implementation-summary)
-6. [API Endpoints and Functional Descriptions](#api-endpoints-and-functional-descriptions)
-7. [Test Cases and Expected Results](#test-cases-and-expected-results)
-8. [Quantitative System Performance Metrics](#quantitative-system-performance-metrics)
-9. [User Satisfaction and Feedback Summary](#user-satisfaction-and-feedback-summary)
-10. [Comparison Between Traditional and Smart Hostel Systems](#comparison-between-traditional-and-smart-hostel-systems)
+3. [Use Case Diagram Representing User Roles](#use-case-diagram-representing-user-roles)
+4. [Tools, Technologies, and Frameworks Used](#tools-technologies-and-frameworks-used)
+5. [Database Collections and Their Attributes](#database-collections-and-their-attributes)
+6. [Module-Wise Implementation Summary](#module-wise-implementation-summary)
+7. [API Endpoints and Functional Descriptions](#api-endpoints-and-functional-descriptions)
+8. [Test Cases and Expected Results](#test-cases-and-expected-results)
+9. [Quantitative System Performance Metrics](#quantitative-system-performance-metrics)
+10. [User Satisfaction and Feedback Summary](#user-satisfaction-and-feedback-summary)
+11. [Comparison Between Traditional and Smart Hostel Systems](#comparison-between-traditional-and-smart-hostel-systems)
 
 ---
 
@@ -98,6 +99,228 @@ Success Rate: 99.7% | Error Rate: 0.3%
 3. **Model Training** → Machine Learning algorithms for prediction
 4. **Real-time Allocation** → Automatic room assignment optimization
 5. **Continuous Learning** → Feedback integration and model improvement
+
+---
+
+## Use Case Diagram Representing User Roles
+
+### System Actors and Their Functional Activities
+
+```
+                    SMART HOSTEL MANAGEMENT SYSTEM
+                              USE CASE DIAGRAM
+
+    ┌─────────────┐                                      ┌─────────────┐
+    │             │                                      │             │
+    │   STUDENT   │                                      │    ADMIN    │
+    │             │                                      │             │
+    └──────┬──────┘                                      └──────┬──────┘
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   User Registration │◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Profile Management│◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Room Booking      │             │
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Payment Processing│             │
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Submit Complaints │             │
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Visitor Management│◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   View Notifications│◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                                                    │
+    ┌──────┴──────┐                                      ┌──────┴──────┐
+    │             │         ┌─────────────────────┐      │             │
+    │   WARDEN    │────────▶│   Complaint Mgmt    │◀─────│  SUPER ADMIN │
+    │             │         └─────────────────────┘      │             │
+    └──────┬──────┘                                      └──────┬──────┘
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Room Allocation   │◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   User Monitoring   │◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           ├───────────────▶│   Generate Reports  │◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           │                │   System Settings   │◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           │                │   User Management   │◀────────────┤
+           │                └─────────────────────┘             │
+           │                                                    │
+           │                ┌─────────────────────┐             │
+           │                │   Analytics & Stats │◀────────────┤
+           │                └─────────────────────┘             │
+```
+
+### Role-Based Access Control Matrix
+
+| Use Case                     | Student      | Warden       | Admin        | Super Admin |
+| ---------------------------- | ------------ | ------------ | ------------ | ----------- |
+| **Authentication & Profile** |              |              |              |             |
+| User Registration            | ✅           | ❌           | ✅           | ✅          |
+| Login/Logout                 | ✅           | ✅           | ✅           | ✅          |
+| Profile Management           | ✅ (Own)     | ✅ (Own)     | ✅ (All)     | ✅ (All)    |
+| Change Password              | ✅           | ✅           | ✅           | ✅          |
+| **Room Management**          |              |              |              |             |
+| View Available Rooms         | ✅           | ✅           | ✅           | ✅          |
+| Room Booking Request         | ✅           | ❌           | ❌           | ❌          |
+| Room Allocation              | ❌           | ✅           | ✅           | ✅          |
+| Room Transfer                | ✅ (Request) | ✅ (Approve) | ✅ (Approve) | ✅          |
+| Room Maintenance             | ❌           | ✅           | ✅           | ✅          |
+| **Payment Management**       |              |              |              |             |
+| Make Payments                | ✅           | ❌           | ❌           | ❌          |
+| View Payment History         | ✅ (Own)     | ✅ (All)     | ✅ (All)     | ✅ (All)    |
+| Generate Receipt             | ✅ (Own)     | ✅ (All)     | ✅ (All)     | ✅ (All)    |
+| Process Refunds              | ❌           | ✅           | ✅           | ✅          |
+| Manual Payment Entry         | ❌           | ✅           | ✅           | ✅          |
+| **Complaint Management**     |              |              |              |             |
+| Submit Complaints            | ✅           | ❌           | ❌           | ❌          |
+| View Own Complaints          | ✅           | ❌           | ❌           | ❌          |
+| Manage All Complaints        | ❌           | ✅           | ✅           | ✅          |
+| Assign Complaints            | ❌           | ✅           | ✅           | ✅          |
+| Update Status                | ❌           | ✅           | ✅           | ✅          |
+| **Visitor Management**       |              |              |              |             |
+| Register Visitors            | ✅           | ✅           | ✅           | ✅          |
+| Approve Visitors             | ❌           | ✅           | ✅           | ✅          |
+| Check-in/Check-out           | ✅ (Own)     | ✅ (All)     | ✅ (All)     | ✅ (All)    |
+| Visitor Reports              | ❌           | ✅           | ✅           | ✅          |
+| **System Administration**    |              |              |              |             |
+| User Management              | ❌           | ❌           | ✅           | ✅          |
+| System Settings              | ❌           | ❌           | ❌           | ✅          |
+| Role Assignment              | ❌           | ❌           | ❌           | ✅          |
+| Database Backup              | ❌           | ❌           | ❌           | ✅          |
+| **Reports & Analytics**      |              |              |              |             |
+| Personal Reports             | ✅ (Own)     | ❌           | ❌           | ❌          |
+| Occupancy Reports            | ❌           | ✅           | ✅           | ✅          |
+| Financial Reports            | ❌           | ✅           | ✅           | ✅          |
+| System Analytics             | ❌           | ❌           | ✅           | ✅          |
+
+### Detailed Use Case Descriptions
+
+#### Student Use Cases
+
+**UC-01: Room Booking**
+
+- **Actor**: Student
+- **Description**: Student can view available rooms and submit booking requests
+- **Preconditions**: Student must be logged in and have no current room assignment
+- **Flow**: Search rooms → View details → Submit request → Await approval
+- **Postconditions**: Booking request recorded in system
+
+**UC-02: Payment Processing**
+
+- **Actor**: Student
+- **Description**: Student makes payments for various fees through Razorpay
+- **Preconditions**: Student logged in, outstanding dues exist
+- **Flow**: Select payment type → Enter amount → Razorpay checkout → Verify payment
+- **Postconditions**: Payment recorded, receipt generated
+
+**UC-03: Complaint Submission**
+
+- **Actor**: Student
+- **Description**: Student submits maintenance or service complaints
+- **Preconditions**: Student logged in
+- **Flow**: Fill complaint form → Attach images → Submit → Track status
+- **Postconditions**: Complaint registered, notification sent to warden
+
+#### Warden Use Cases
+
+**UC-04: Room Allocation Management**
+
+- **Actor**: Warden
+- **Description**: Warden allocates rooms to students and manages transfers
+- **Preconditions**: Warden logged in, pending requests exist
+- **Flow**: Review requests → Check availability → Approve/reject → Notify student
+- **Postconditions**: Room allocation updated, notifications sent
+
+**UC-05: Complaint Resolution**
+
+- **Actor**: Warden
+- **Description**: Warden manages and resolves student complaints
+- **Preconditions**: Warden logged in, complaints exist
+- **Flow**: View complaints → Assign priority → Take action → Update status
+- **Postconditions**: Complaint resolved, student notified
+
+**UC-06: Visitor Approval**
+
+- **Actor**: Warden
+- **Description**: Warden approves/rejects visitor requests
+- **Preconditions**: Warden logged in, visitor requests pending
+- **Flow**: Review request → Verify details → Approve/reject → Generate QR
+- **Postconditions**: Visitor status updated, QR code generated
+
+#### Admin Use Cases
+
+**UC-07: User Management**
+
+- **Actor**: Admin
+- **Description**: Admin manages user accounts and profiles
+- **Preconditions**: Admin logged in
+- **Flow**: View users → Create/edit/delete → Assign roles → Send notifications
+- **Postconditions**: User accounts updated
+
+**UC-08: Financial Management**
+
+- **Actor**: Admin
+- **Description**: Admin oversees all financial transactions and generates reports
+- **Preconditions**: Admin logged in
+- **Flow**: View transactions → Process refunds → Generate reports → Export data
+- **Postconditions**: Financial records updated
+
+**UC-09: System Monitoring**
+
+- **Actor**: Admin
+- **Description**: Admin monitors system performance and generates analytics
+- **Preconditions**: Admin logged in
+- **Flow**: View dashboard → Analyze metrics → Generate reports → Take actions
+- **Postconditions**: System status documented
+
+### System Interaction Flow
+
+```
+Student Journey:
+Registration → Profile Setup → Room Request → Payment → Check-in →
+Complaint (if needed) → Visitor Registration → Payment Renewal → Check-out
+
+Administrative Flow:
+User Creation → Room Allocation → Payment Monitoring → Issue Resolution →
+Report Generation → System Maintenance
+```
+
+### Use Case Relationships
+
+- **Include**: Common functionalities used across multiple use cases
+  - Authentication (included in all use cases)
+  - Notification system (included in status updates)
+- **Extend**: Optional functionalities that enhance main use cases
+  - Email notifications extend payment processing
+  - SMS alerts extend visitor management
+- **Generalization**: Hierarchical relationships between use cases
+  - "Make Payment" generalizes to "Online Payment" and "Cash Payment"
+  - "Generate Report" generalizes to specific report types
 
 ---
 
