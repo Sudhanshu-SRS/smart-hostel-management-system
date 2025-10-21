@@ -84,9 +84,17 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: "USER_LOADING" });
       try {
         const res = await axios.get("/api/auth/me");
+
+        // Ensure user object has both id and _id for compatibility
+        const userData = {
+          ...res.data.user,
+          id: res.data.user._id || res.data.user.id, // Ensure id exists
+          _id: res.data.user._id || res.data.user.id, // Ensure _id exists
+        };
+
         dispatch({
           type: "USER_LOADED",
-          payload: res.data.user,
+          payload: userData,
         });
       } catch (error) {
         console.error("Load user error:", error);
@@ -96,7 +104,11 @@ export const AuthProvider = ({ children }) => {
         });
       }
     } else {
-      dispatch({ type: "AUTH_ERROR" });
+      // If no token, set loading to false
+      dispatch({
+        type: "AUTH_ERROR",
+        payload: null,
+      });
     }
   };
 
@@ -132,11 +144,22 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: "USER_LOADING" });
     try {
       const res = await axios.post("/api/auth/login", { email, password });
+
+      // Ensure user object has both id and _id for compatibility
+      const userData = {
+        ...res.data.user,
+        id: res.data.user._id || res.data.user.id,
+        _id: res.data.user._id || res.data.user.id,
+      };
+
       dispatch({
         type: "LOGIN_SUCCESS",
-        payload: res.data,
+        payload: {
+          ...res.data,
+          user: userData,
+        },
       });
-      toast.success(`Welcome back, ${res.data.user.name}! 👋`);
+      toast.success(`Welcome back, ${userData.name}! 👋`);
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || "Login failed";
@@ -192,4 +215,20 @@ export const useAuth = () => {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+};
+
+// In your component, add debugging
+const YourComponent = () => {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    console.log("User from auth context:", user);
+    if (user && user._id) {
+      fetchUserQR();
+    } else {
+      console.error("User or user ID not available");
+    }
+  }, [user]);
+
+  // ... rest of component
 };

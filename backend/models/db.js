@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto"); // Add missing crypto import
+const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema(
   {
@@ -82,6 +82,61 @@ const userSchema = new mongoose.Schema(
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    guardianNotifications: {
+      email: {
+        type: Boolean,
+        default: true,
+      },
+      sms: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    currentStatus: {
+      type: String,
+      enum: ["in_hostel", "out_of_hostel"],
+      default: "in_hostel",
+    },
+    lastExitTime: Date,
+    lastEntryTime: Date,
+    frequentExitTimes: [String],
+    assignedGates: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Gate",
+      },
+    ],
+    qrCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    qrCodeImage: {
+      type: String,
+    },
+    parentGuardianContact: {
+      name: {
+        type: String,
+        trim: true,
+      },
+      email: {
+        type: String,
+        lowercase: true,
+        match: [
+          /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+          "Please enter a valid email",
+        ],
+      },
+      phone: {
+        type: String,
+        match: [/^[0-9]{10}$/, "Please enter a valid 10-digit phone number"],
+      },
+      relationship: {
+        type: String,
+        enum: ["father", "mother", "guardian", "other"],
+        default: "father",
+      },
+    },
   },
   {
     timestamps: true,
@@ -106,8 +161,13 @@ userSchema.pre("save", async function (next) {
   }
 });
 
-// Compare password method
+// Compare password method (primary method)
 userSchema.methods.comparePassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Match password method (alias for compatibility)
+userSchema.methods.matchPassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 

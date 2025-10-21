@@ -118,7 +118,10 @@ router.post("/login", validateLogin, async (req, res) => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = await User.findOne({ email }).populate("room");
+    const user = await User.findOne({ email })
+      .select("+password")
+      .populate("room");
+
     if (!user) {
       return res.status(400).json({
         success: false,
@@ -126,15 +129,7 @@ router.post("/login", validateLogin, async (req, res) => {
       });
     }
 
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(400).json({
-        success: false,
-        message: "Account is deactivated. Please contact administrator.",
-      });
-    }
-
-    // Check password
+    // Check password - use comparePassword instead of matchPassword
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(400).json({
@@ -147,15 +142,15 @@ router.post("/login", validateLogin, async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
-    // Generate token
+    // Generate JWT token
     const token = generateToken(user._id);
 
     res.json({
       success: true,
-      message: "Login successful",
       token,
       user: {
-        id: user._id,
+        id: user._id, // Add id for frontend compatibility
+        _id: user._id, // Keep _id for backend compatibility
         name: user.name,
         email: user.email,
         role: user.role,
@@ -164,6 +159,7 @@ router.post("/login", validateLogin, async (req, res) => {
         room: user.room,
         profilePicture: user.profilePicture,
         lastLogin: user.lastLogin,
+        currentStatus: user.currentStatus,
       },
     });
   } catch (error) {
@@ -187,7 +183,19 @@ router.get("/me", auth, async (req, res) => {
 
     res.json({
       success: true,
-      user,
+      user: {
+        id: user._id, // Add id for frontend compatibility
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phoneNumber: user.phoneNumber,
+        studentId: user.studentId,
+        room: user.room,
+        profilePicture: user.profilePicture,
+        currentStatus: user.currentStatus,
+        lastLogin: user.lastLogin,
+      },
     });
   } catch (error) {
     console.error("Get user error:", error);

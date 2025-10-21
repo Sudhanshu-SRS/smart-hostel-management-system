@@ -39,6 +39,7 @@ import {
   Notifications,
   AccountCircle,
   Security,
+  QrCodeScanner,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -154,6 +155,13 @@ const AdminLayout = ({ children }) => {
       path: "/settings",
       roles: ["admin"],
       description: "Configuration & preferences",
+    },
+    {
+      text: "Entry/Exit Management",
+      icon: <QrCodeScanner />,
+      path: "/entry-exit",
+      roles: ["admin", "warden"],
+      description: "QR scanning & gate management",
     },
   ];
 

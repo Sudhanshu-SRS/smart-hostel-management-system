@@ -391,6 +391,431 @@ class EmailService {
       return { success: false, error: error.message };
     }
   }
+
+  async sendEmail({ to, subject, html, text }) {
+    try {
+      const mailOptions = {
+        from: `"SHMS - Smart Hostel Management" <${process.env.EMAIL_FROM}>`,
+        to,
+        subject,
+        html,
+        text,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log("✅ Email sent successfully:", info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error("❌ Error sending email:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendEntryExitNotification(guardianEmail, data) {
+    try {
+      const {
+        studentName,
+        studentId,
+        action,
+        gateName,
+        timestamp,
+        guardianName,
+      } = data;
+
+      const mailOptions = {
+        from: `"SHMS Security Alert" <${process.env.EMAIL_FROM}>`,
+        to: guardianEmail,
+        subject: `🚨 ${action.toUpperCase()} Alert: ${studentName} - SHMS`,
+        html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; background: linear-gradient(135deg, #1976d2, #42a5f5); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h1>${action === "entry" ? "🏠" : "🚪"} Hostel ${
+          action.charAt(0).toUpperCase() + action.slice(1)
+        } Alert</h1>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2>Dear ${guardianName || "Guardian"},</h2>
+            <p>This is to inform you that <strong>${studentName}</strong> has ${
+          action === "entry" ? "entered" : "exited"
+        } the hostel premises.</p>
+            
+            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #1976d2;">
+              <p><strong>Student:</strong> ${studentName} (${studentId})</p>
+              <p><strong>Action:</strong> ${action.toUpperCase()}</p>
+              <p><strong>Gate:</strong> ${gateName}</p>
+              <p><strong>Time:</strong> ${new Date(
+                timestamp
+              ).toLocaleString()}</p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; color: #666; font-size: 12px;">
+            <p>This is an automated security notification from SHMS.</p>
+            <p>For any concerns, please contact the hostel administration.</p>
+          </div>
+        </div>
+        `,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log("✅ Entry/Exit notification sent:", info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error("❌ Entry/Exit notification error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendEntryExitNotification(student, actionType, logData) {
+    try {
+      const { outingReason, expectedReturnTime, gate, approvedBy } = logData;
+
+      const actionText = actionType === "exit" ? "left" : "entered";
+      const actionIcon = actionType === "exit" ? "🚪➡️" : "🚪⬅️";
+
+      const subject = `${actionIcon} SHMS Alert: ${student.name} has ${actionText} the hostel`;
+
+      const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #1976d2, #42a5f5); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+          <h1 style="margin: 0; font-size: 24px;">${actionIcon} Hostel ${actionType.toUpperCase()} Alert</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">Smart Hostel Management System</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #1976d2; margin-top: 0;">Dear Parent/Guardian,</h2>
+          <p style="font-size: 16px; line-height: 1.6;">
+            This is to inform you that <strong>${
+              student.name
+            }</strong> (Student ID: ${student.studentId}) 
+            has <strong>${actionText}</strong> the hostel premises.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #1976d2; margin: 20px 0;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+              <div>
+                <strong>📅 Date & Time:</strong><br>
+                ${new Date().toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "full",
+                  timeStyle: "short",
+                })}
+              </div>
+              <div>
+                <strong>🚪 Gate Location:</strong><br>
+                ${gate.gateName} - ${gate.location}
+              </div>
+              ${
+                actionType === "exit"
+                  ? `
+              <div>
+                <strong>📝 Reason:</strong><br>
+                ${outingReason}
+              </div>
+              <div>
+                <strong>⏰ Expected Return:</strong><br>
+                ${new Date(expectedReturnTime).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </div>
+              `
+                  : ""
+              }
+              <div>
+                <strong>✅ Approved By:</strong><br>
+                ${approvedBy.name} (${approvedBy.role})
+              </div>
+            </div>
+          </div>
+          
+          ${
+            actionType === "exit"
+              ? `
+          <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+            <p style="margin: 0; color: #856404;">
+              <strong>⚠️ Important:</strong> You will receive another notification when ${student.name} returns to the hostel.
+              If they return after the expected time, you'll receive a late return alert.
+            </p>
+          </div>
+          `
+              : ""
+          }
+        </div>
+        
+        <div style="text-align: center; padding: 20px; color: #666; font-size: 14px; border-top: 1px solid #eee;">
+          <p>This is an automated security notification from SHMS.</p>
+          <p>For any queries, please contact the hostel administration at <a href="mailto:admin@shms.com">admin@shms.com</a></p>
+          <p style="font-size: 12px; margin-top: 15px;">
+            © ${new Date().getFullYear()} Smart Hostel Management System. All rights reserved.
+          </p>
+        </div>
+      </div>
+      `;
+
+      // Send to parent/guardian
+      if (student.parentGuardianContact?.email) {
+        await this.sendEmail({
+          to: student.parentGuardianContact.email,
+          subject: subject,
+          html: htmlContent,
+        });
+        console.log(
+          `✅ Entry/Exit notification sent to parent: ${student.parentGuardianContact.email}`
+        );
+      }
+
+      // Send to warden
+      const wardenEmail = process.env.WARDEN_EMAIL || "warden@shms.com";
+      await this.sendEmail({
+        to: wardenEmail,
+        subject: `📊 SHMS: Student ${actionType} - ${student.name}`,
+        html: htmlContent,
+      });
+      console.log(`✅ Entry/Exit notification sent to warden: ${wardenEmail}`);
+
+      return { success: true };
+    } catch (error) {
+      console.error("❌ Entry/Exit notification error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendLateReturnAlert(student, logData) {
+    try {
+      const { expectedReturnTime, actualReturnTime, outingReason, gate } =
+        logData;
+      const lateByMinutes = Math.floor(
+        (new Date(actualReturnTime) - new Date(expectedReturnTime)) /
+          (1000 * 60)
+      );
+
+      const subject = `🚨 LATE RETURN ALERT: ${student.name} - SHMS`;
+
+      const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #d32f2f, #f44336); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+          <h1 style="margin: 0; font-size: 24px;">🚨 LATE RETURN ALERT</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">Immediate Attention Required</p>
+        </div>
+        
+        <div style="background: #ffebee; padding: 25px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f44336;">
+          <h2 style="color: #d32f2f; margin-top: 0;">Late Return Detected</h2>
+          <p style="font-size: 16px; line-height: 1.6;">
+            <strong>${student.name}</strong> (Student ID: ${
+        student.studentId
+      }) has returned 
+            <strong style="color: #d32f2f;">${lateByMinutes} minutes late</strong> from their approved outing.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+              <div>
+                <strong>📅 Expected Return:</strong><br>
+                ${new Date(expectedReturnTime).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </div>
+              <div>
+                <strong>📅 Actual Return:</strong><br>
+                ${new Date(actualReturnTime).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </div>
+              <div>
+                <strong>📝 Original Reason:</strong><br>
+                ${outingReason}
+              </div>
+              <div>
+                <strong>🚪 Return Gate:</strong><br>
+                ${gate.gateName} - ${gate.location}
+              </div>
+            </div>
+          </div>
+          
+          <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+            <p style="margin: 0; color: #856404;">
+              <strong>📞 Action Required:</strong> Please follow up with ${
+                student.name
+              } regarding the late return. 
+              Consider discussing time management and the importance of adhering to agreed schedules.
+            </p>
+          </div>
+        </div>
+        
+        <div style="text-align: center; padding: 20px; color: #666; font-size: 14px; border-top: 1px solid #eee;">
+          <p>This is an automated security alert from SHMS.</p>
+          <p>For immediate assistance, please contact the hostel administration.</p>
+        </div>
+      </div>
+      `;
+
+      // Send to parent/guardian
+      if (student.parentGuardianContact?.email) {
+        await this.sendEmail({
+          to: student.parentGuardianContact.email,
+          subject: subject,
+          html: htmlContent,
+        });
+      }
+
+      // Send to warden
+      const wardenEmail = process.env.WARDEN_EMAIL || "warden@shms.com";
+      await this.sendEmail({
+        to: wardenEmail,
+        subject: subject,
+        html: htmlContent,
+      });
+
+      console.log(`✅ Late return alert sent for student: ${student.name}`);
+      return { success: true };
+    } catch (error) {
+      console.error("❌ Late return alert error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendMessFeedbackToWarden(feedbackData) {
+    try {
+      const {
+        student,
+        feedbackType,
+        mealType,
+        foodQuality,
+        serviceQuality,
+        cleanliness,
+        overallSatisfaction,
+        suggestions,
+        complaints,
+        isAnonymous,
+      } = feedbackData;
+
+      const subject = `📝 Mess Feedback Submission - ${feedbackType.toUpperCase()}`;
+
+      const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #2e7d32, #4caf50); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+          <h1 style="margin: 0; font-size: 24px;">📝 Mess Feedback Submission</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">${
+            feedbackType.charAt(0).toUpperCase() + feedbackType.slice(1)
+          } Feedback</p>
+        </div>
+        
+        <div style="background: #f1f8e9; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #2e7d32; margin-top: 0;">Feedback Details</h2>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+              <div>
+                <strong>👤 Student:</strong><br>
+                ${
+                  isAnonymous
+                    ? "Anonymous Feedback"
+                    : `${student.name} (${student.studentId})`
+                }
+              </div>
+              <div>
+                <strong>🍽️ Meal Type:</strong><br>
+                ${mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+              </div>
+              <div>
+                <strong>📅 Date:</strong><br>
+                ${new Date().toLocaleDateString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "full",
+                })}
+              </div>
+              <div>
+                <strong>📊 Feedback Type:</strong><br>
+                ${feedbackType.charAt(0).toUpperCase() + feedbackType.slice(1)}
+              </div>
+            </div>
+            
+            <div style="border-top: 1px solid #eee; padding-top: 20px;">
+              <h3 style="color: #2e7d32; margin-top: 0;">Ratings (1-5 stars)</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                  <strong>🍯 Food Quality:</strong> ${"⭐".repeat(
+                    foodQuality
+                  )}${"☆".repeat(5 - foodQuality)} (${foodQuality}/5)
+                </div>
+                <div>
+                  <strong>👥 Service Quality:</strong> ${"⭐".repeat(
+                    serviceQuality
+                  )}${"☆".repeat(5 - serviceQuality)} (${serviceQuality}/5)
+                </div>
+                <div>
+                  <strong>🧹 Cleanliness:</strong> ${"⭐".repeat(
+                    cleanliness
+                  )}${"☆".repeat(5 - cleanliness)} (${cleanliness}/5)
+                </div>
+                <div>
+                  <strong>🎯 Overall Satisfaction:</strong> ${"⭐".repeat(
+                    overallSatisfaction
+                  )}${"☆".repeat(
+        5 - overallSatisfaction
+      )} (${overallSatisfaction}/5)
+                </div>
+              </div>
+            </div>
+            
+            ${
+              suggestions
+                ? `
+            <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px;">
+              <strong>💡 Suggestions:</strong><br>
+              <p style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 10px 0; font-style: italic;">
+                "${suggestions}"
+              </p>
+            </div>
+            `
+                : ""
+            }
+            
+            ${
+              complaints
+                ? `
+            <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px;">
+              <strong>⚠️ Complaints:</strong><br>
+              <p style="background: #fff3cd; padding: 15px; border-radius: 6px; margin: 10px 0; font-style: italic; border-left: 4px solid #ffc107;">
+                "${complaints}"
+              </p>
+            </div>
+            `
+                : ""
+            }
+          </div>
+        </div>
+        
+        <div style="text-align: center; padding: 20px; color: #666; font-size: 14px; border-top: 1px solid #eee;">
+          <p>This feedback has been automatically submitted through the SHMS mobile app.</p>
+          <p>Please review and take appropriate action to improve mess services.</p>
+        </div>
+      </div>
+      `;
+
+      const wardenEmail = process.env.WARDEN_EMAIL || "warden@shms.com";
+      await this.sendEmail({
+        to: wardenEmail,
+        subject: subject,
+        html: htmlContent,
+      });
+
+      console.log(
+        `✅ Mess feedback sent to warden for ${feedbackType} feedback`
+      );
+      return { success: true };
+    } catch (error) {
+      console.error("❌ Mess feedback email error:", error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = new EmailService();

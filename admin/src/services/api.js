@@ -1,20 +1,27 @@
 // admin/src/services/api.js
 import axios from "axios";
 
-// Base API configuration
-const API_BASE = "/api";
+const API_BASE = "http://localhost:5000/api";
 
-// Configure axios defaults
-axios.defaults.baseURL = "http://localhost:5000";
-axios.defaults.timeout = 10000;
+// Configure axios instance
+const axiosInstance = axios.create({
+  baseURL: API_BASE,
+  timeout: 10000,
+});
 
 // Request interceptor
-axios.interceptors.request.use(
+axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("shms_admin_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+
+    if (token && token.startsWith("hardcoded_admin_")) {
+      // For hardcoded admin, set special header and don't send Authorization
+      config.headers["X-Admin-Mode"] = "hardcoded";
+      // Don't set Authorization header for hardcoded admin
+    } else if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => {
@@ -23,135 +30,109 @@ axios.interceptors.request.use(
 );
 
 // Response interceptor
-axios.interceptors.response.use(
+axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("shms_admin_token");
-      window.location.href = "/login";
+      const token = localStorage.getItem("shms_admin_token");
+      // Only logout if it's not a hardcoded admin
+      if (!token || !token.startsWith("hardcoded_admin_")) {
+        localStorage.removeItem("shms_admin_token");
+        localStorage.removeItem("shms_admin_user");
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
 );
 
-// Admin API Services
-export const adminAPI = {
+const api = {
+  // Authentication APIs
+  login: (credentials) => axiosInstance.post("/auth/login", credentials),
+  logout: () => axiosInstance.post("/auth/logout"),
+  getProfile: () => axiosInstance.get("/auth/me"),
+
   // Dashboard APIs
-  getDashboardStats: () => axios.get(`${API_BASE}/admin/dashboard/stats`),
-  getSystemHealth: () => axios.get(`${API_BASE}/admin/system/health`),
-  getRecentActivities: () => axios.get(`${API_BASE}/admin/activities`),
+  getDashboardStats: () => axiosInstance.get("/dashboard/stats"),
+  getRecentActivities: (limit = 10) =>
+    axiosInstance.get(`/dashboard/recent-activities?limit=${limit}`),
 
   // User Management APIs
-  getAllUsers: (params) => axios.get("/api/users", { params }),
-  getUserById: (id) => axios.get(`/api/users/${id}`),
-  createUser: (userData) => axios.post("/api/users", userData),
-  updateUser: (id, userData) => axios.put(`/api/users/${id}`, userData),
-  deleteUser: (id) => axios.delete(`/api/users/${id}`),
-  toggleUserStatus: (id) => axios.put(`/api/users/${id}/toggle-status`),
-  getUserStats: () => axios.get("/api/users/stats/summary"),
-  bulkUpdateUsers: (userIds, updateData) =>
-    axios.put("/api/users/bulk", { userIds, updateData }),
-  exportUsers: (format) =>
-    axios.get(`/api/users/export/${format}`, {
-      responseType: "blob",
-    }),
+  getAllUsers: (params) => axiosInstance.get("/users", { params }),
+  getUserById: (id) => axiosInstance.get(`/users/${id}`),
+  createUser: (userData) => axiosInstance.post("/users", userData),
+  updateUser: (id, userData) => axiosInstance.put(`/users/${id}`, userData),
+  deleteUser: (id) => axiosInstance.delete(`/users/${id}`),
+  getUserStats: () => axiosInstance.get("/users/stats/summary"),
 
   // Room Management APIs
-  getAllRooms: (params) => axios.get(`${API_BASE}/admin/rooms`, { params }),
-  getRoomById: (id) => axios.get(`${API_BASE}/admin/rooms/${id}`),
-  createRoom: (roomData) => axios.post(`${API_BASE}/admin/rooms`, roomData),
-  updateRoom: (id, roomData) =>
-    axios.put(`${API_BASE}/admin/rooms/${id}`, roomData),
-  deleteRoom: (id) => axios.delete(`${API_BASE}/admin/rooms/${id}`),
-  bulkRoomOperation: (operation, roomIds, data) =>
-    axios.post(`${API_BASE}/admin/rooms/bulk/${operation}`, { roomIds, data }),
-  getRoomOccupancy: () => axios.get(`${API_BASE}/admin/rooms/occupancy`),
+  get: (url, config) => axiosInstance.get(url, config),
+  post: (url, data, config) => axiosInstance.post(url, data, config),
+  put: (url, data, config) => axiosInstance.put(url, data, config),
+  delete: (url, config) => axiosInstance.delete(url, config),
+  getAllRooms: (params) => axiosInstance.get("/rooms", { params }),
+  getRoomById: (id) => axiosInstance.get(`/rooms/${id}`),
+  createRoom: (roomData) => axiosInstance.post("/rooms", roomData),
+  updateRoom: (id, roomData) => axiosInstance.put(`/rooms/${id}`, roomData),
+  deleteRoom: (id) => axiosInstance.delete(`/rooms/${id}`),
+  getRoomOccupancy: () => axiosInstance.get("/rooms/stats/occupancy"),
 
   // Payment Management APIs
-  getAllPayments: (params) =>
-    axios.get(`${API_BASE}/admin/payments`, { params }),
-  getPaymentById: (id) => axios.get(`${API_BASE}/admin/payments/${id}`),
-  updatePaymentStatus: (id, status) =>
-    axios.put(`${API_BASE}/admin/payments/${id}/status`, { status }),
-  getPaymentAnalytics: (period) =>
-    axios.get(`${API_BASE}/admin/payments/analytics/${period}`),
-  exportPayments: (format, params) =>
-    axios.get(`${API_BASE}/admin/payments/export/${format}`, {
-      params,
-      responseType: "blob",
-    }),
-  initiateRefund: (paymentId, amount, reason) =>
-    axios.post(`${API_BASE}/admin/payments/${paymentId}/refund`, {
-      amount,
-      reason,
-    }),
+  getAllPayments: (params) => axiosInstance.get("/payments", { params }),
+  getPaymentById: (id) => axiosInstance.get(`/payments/${id}`),
+  createPayment: (paymentData) => axiosInstance.post("/payments", paymentData),
+  createManualPayment: (paymentData) =>
+    axiosInstance.post("/payments/manual", paymentData),
+  updatePayment: (id, paymentData) =>
+    axiosInstance.put(`/payments/${id}`, paymentData),
+  processRefund: (id, refundData) =>
+    axiosInstance.post(`/payments/${id}/refund`, refundData),
+  getOverduePayments: () => axiosInstance.get("/payments/overdue"),
+  getPaymentStats: () => axiosInstance.get("/payments/stats/summary"),
+  getPaymentAnalytics: (params) =>
+    axiosInstance.get("/payments/analytics", { params }),
 
   // Complaint Management APIs
-  getAllComplaints: (params) =>
-    axios.get(`${API_BASE}/admin/complaints`, { params }),
-  getComplaintById: (id) => axios.get(`${API_BASE}/admin/complaints/${id}`),
-  updateComplaintStatus: (id, status, response) =>
-    axios.put(`${API_BASE}/admin/complaints/${id}/status`, {
-      status,
-      response,
-    }),
-  assignComplaint: (id, assignedTo) =>
-    axios.put(`${API_BASE}/admin/complaints/${id}/assign`, { assignedTo }),
-  bulkComplaintUpdate: (complaintIds, updateData) =>
-    axios.put(`${API_BASE}/admin/complaints/bulk`, {
-      complaintIds,
-      updateData,
-    }),
-  getComplaintAnalytics: () =>
-    axios.get(`${API_BASE}/admin/complaints/analytics`),
+  getAllComplaints: (params) => axiosInstance.get("/complaints", { params }),
+  getComplaintById: (id) => axiosInstance.get(`/complaints/${id}`),
+  updateComplaint: (id, complaintData) =>
+    axiosInstance.put(`/complaints/${id}`, complaintData),
+  assignComplaint: (id, assignData) =>
+    axiosInstance.post(`/complaints/${id}/assign`, assignData),
+  resolveComplaint: (id, resolutionData) =>
+    axiosInstance.post(`/complaints/${id}/resolve`, resolutionData),
+  getComplaintStats: () => axiosInstance.get("/complaints/stats/summary"),
 
   // Visitor Management APIs
-  getAllVisitors: (params) =>
-    axios.get(`${API_BASE}/admin/visitors`, { params }),
-  getVisitorById: (id) => axios.get(`${API_BASE}/admin/visitors/${id}`),
-  updateVisitorStatus: (id, status) =>
-    axios.put(`${API_BASE}/admin/visitors/${id}/status`, { status }),
-  checkInVisitor: (id) =>
-    axios.post(`${API_BASE}/admin/visitors/${id}/checkin`),
-  checkOutVisitor: (id) =>
-    axios.post(`${API_BASE}/admin/visitors/${id}/checkout`),
-  getVisitorAnalytics: () => axios.get(`${API_BASE}/admin/visitors/analytics`),
-  exportVisitors: (format, params) =>
-    axios.get(`${API_BASE}/admin/visitors/export/${format}`, {
-      params,
-      responseType: "blob",
-    }),
+  getAllVisitors: (params) => axiosInstance.get("/visitors", { params }),
+  getVisitorById: (id) => axiosInstance.get(`/visitors/${id}`),
+  approveVisitor: (id) => axiosInstance.put(`/visitors/${id}/approve`),
+  rejectVisitor: (id, rejectionData) =>
+    axiosInstance.put(`/visitors/${id}/reject`, rejectionData),
+  checkoutVisitor: (id) => axiosInstance.put(`/visitors/${id}/checkout`),
+  getVisitorAnalytics: () => axiosInstance.get("/visitors/stats/summary"),
 
-  // Analytics APIs
-  getAdvancedAnalytics: (type, period) =>
-    axios.get(`${API_BASE}/admin/analytics/${type}/${period}`),
-  getCustomReport: (reportConfig) =>
-    axios.post(`${API_BASE}/admin/analytics/custom`, reportConfig),
+  // Gate Management APIs (for QR scanning)
+  getAllGates: (params = {}) => axiosInstance.get("/gates", { params }),
+  getGate: (id) => axiosInstance.get(`/gates/${id}`),
+  createGate: (gateData) => axiosInstance.post("/gates", gateData),
+  updateGate: (id, gateData) => axiosInstance.put(`/gates/${id}`, gateData),
+  deleteGate: (id) => axiosInstance.delete(`/gates/${id}`),
+
+  // Entry/Exit APIs
+  scanStudentQR: (scanData) =>
+    axiosInstance.post("/gates/scan-student-qr", scanData),
+  getEntryExitLogs: (params = {}) =>
+    axiosInstance.get("/gates/entry-exit-logs", { params }),
+  getGateStats: () => axiosInstance.get("/gates/stats"),
+  getStudentQR: (studentId) =>
+    axiosInstance.get(`/gates/student-qr/${studentId}`),
 
   // System Settings APIs
-  getSystemSettings: () => axios.get(`${API_BASE}/admin/settings`),
+  getSystemSettings: () => axiosInstance.get("/admin/settings"),
   updateSystemSettings: (settings) =>
-    axios.put(`${API_BASE}/admin/settings`, settings),
-  getAuditLogs: (params) =>
-    axios.get(`${API_BASE}/admin/audit-logs`, { params }),
-
-  // Backup & Maintenance APIs
-  initiateBackup: () => axios.post(`${API_BASE}/admin/system/backup`),
-  getBackupHistory: () => axios.get(`${API_BASE}/admin/system/backups`),
-  restoreBackup: (backupId) =>
-    axios.post(`${API_BASE}/admin/system/restore/${backupId}`),
-  enableMaintenanceMode: () =>
-    axios.post(`${API_BASE}/admin/system/maintenance/enable`),
-  disableMaintenanceMode: () =>
-    axios.post(`${API_BASE}/admin/system/maintenance/disable`),
-
-  // Notification APIs
-  sendBulkNotification: (notificationData) =>
-    axios.post(`${API_BASE}/admin/notifications/bulk`, notificationData),
-  getNotificationTemplates: () =>
-    axios.get(`${API_BASE}/admin/notifications/templates`),
-  createNotificationTemplate: (template) =>
-    axios.post(`${API_BASE}/admin/notifications/templates`, template),
+    axiosInstance.put("/admin/settings", settings),
 };
 
-export default adminAPI;
+export default api;
+export { api as adminAPI };

@@ -3,8 +3,17 @@ const User = require("../models/db");
 
 const auth = async (req, res, next) => {
   try {
-    // Check if hardcoded admin (bypass token verification)
-    if (req.user && req.user._id === "hardcoded_admin") {
+    // Check if it's a hardcoded admin request first
+    if (req.headers["x-admin-mode"] === "hardcoded") {
+      // Create a fake admin user for hardcoded admin
+      req.user = {
+        _id: "hardcoded_admin",
+        id: "hardcoded_admin",
+        role: "admin",
+        name: "Hardcoded Admin",
+        email: "admin@shms.com",
+        isActive: true,
+      };
       console.log(
         `🔐 Hardcoded admin authenticated for: ${req.method} ${req.path}`
       );

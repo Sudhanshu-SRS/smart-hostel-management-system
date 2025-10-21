@@ -19,6 +19,9 @@ const paymentRoutes = require("./routes/PaymentR");
 const complaintRoutes = require("./routes/ComplaintR");
 const visitorRoutes = require("./routes/VisitorR");
 const dashboardRoutes = require("./routes/DashboardR");
+const gateRoutes = require("./routes/gateRoutes");
+const messFeedbackRoutes = require("./routes/messFeedbackRoutes");
+const reportRoutes = require("./routes/ReportR");
 
 const app = express();
 const server = http.createServer(app);
@@ -26,7 +29,11 @@ const server = http.createServer(app);
 // Socket.io setup
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: [
+      process.env.CLIENT_URL || "http://localhost:3000",
+      "http://localhost:3001", // Admin panel
+      "http://localhost:5173", // Vite dev server
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -84,20 +91,34 @@ app.use((req, res, next) => {
 
 // Socket.io connection handling
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  console.log("👤 User connected:", socket.id);
 
-  socket.on("joinRoom", (room) => {
-    socket.join(room);
-    console.log(`User ${socket.id} joined room: ${room}`);
+  // Join admin room for real-time updates
+  socket.on("joinAdmin", (adminData) => {
+    socket.join("admin");
+    console.log(`👨‍💼 Admin ${adminData.name} joined admin room`);
   });
 
-  socket.on("leaveRoom", (room) => {
-    socket.leave(room);
-    console.log(`User ${socket.id} left room: ${room}`);
+  // Join student room
+  socket.on("joinStudent", (studentData) => {
+    socket.join(`student_${studentData.id}`);
+    console.log(`🎓 Student ${studentData.name} joined their room`);
+  });
+
+  // Real-time movement tracking
+  socket.on("trackMovement", (data) => {
+    // Broadcast to admin panel
+    io.to("admin").emit("liveMovement", {
+      type: "movement_update",
+      student: data.student,
+      gate: data.gate,
+      action: data.action,
+      timestamp: new Date(),
+    });
   });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+    console.log("👋 User disconnected:", socket.id);
   });
 });
 
@@ -116,6 +137,9 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/visitors", visitorRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/gates", gateRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/mess-feedback", messFeedbackRoutes);
 
 // Health check route
 app.get("/api/health", (req, res) => {
@@ -152,6 +176,10 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+
+  // Initialize payment scheduler
+  const paymentScheduler = require("./services/paymentScheduler");
+  paymentScheduler.init();
 });
 
 // Graceful shutdown

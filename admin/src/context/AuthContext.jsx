@@ -7,10 +7,10 @@ import { HARDCODED_ADMINS } from "../config/adminConfig";
 const AuthContext = createContext();
 
 const initialState = {
-  user: null,
   token: localStorage.getItem("shms_admin_token"),
   isAuthenticated: false,
   loading: true,
+  user: null,
   error: null,
 };
 
@@ -23,20 +23,22 @@ const authReducer = (state, action) => {
         error: null,
       };
     case "USER_LOADED":
-      return {
-        ...state,
-        isAuthenticated: true,
-        loading: false,
-        user: action.payload,
-        error: null,
-      };
     case "LOGIN_SUCCESS":
-      // For hardcoded admin, we create a fake token
-      const fakeToken = `hardcoded_admin_${Date.now()}`;
-      localStorage.setItem("shms_admin_token", fakeToken);
+      // Handle both real and hardcoded admin tokens
+      const token = action.payload.token || state.token;
+      if (token) {
+        localStorage.setItem("shms_admin_token", token);
+      }
+      if (action.payload.user) {
+        localStorage.setItem(
+          "shms_admin_user",
+          JSON.stringify(action.payload.user)
+        );
+      }
+
       return {
         ...state,
-        token: fakeToken,
+        token: token,
         user: action.payload.user,
         isAuthenticated: true,
         loading: false,
@@ -61,9 +63,11 @@ const authReducer = (state, action) => {
         error: null,
       };
     case "UPDATE_USER":
+      const updatedUser = { ...state.user, ...action.payload };
+      localStorage.setItem("shms_admin_user", JSON.stringify(updatedUser));
       return {
         ...state,
-        user: { ...state.user, ...action.payload },
+        user: updatedUser,
       };
     default:
       return state;
@@ -75,68 +79,26 @@ export const AuthProvider = ({ children }) => {
 
   // Configure axios defaults
   useEffect(() => {
-    // Always configure axios to connect to your backend
-    axios.defaults.baseURL = "http://localhost:5000"; // Your backend URL
+    axios.defaults.baseURL = "http://localhost:5000";
     axios.defaults.timeout = 10000;
 
-    // For hardcoded admin, we'll create a fake token that bypasses backend auth
+    // Configure headers based on token type
     if (state.token && state.token.startsWith("hardcoded_admin_")) {
-      // Set a special header for hardcoded admin
       axios.defaults.headers.common["X-Admin-Mode"] = "hardcoded";
-      // Don't set Authorization header for hardcoded admin
+      delete axios.defaults.headers.common["Authorization"];
     } else if (state.token) {
       axios.defaults.headers.common["Authorization"] = `Bearer ${state.token}`;
+      delete axios.defaults.headers.common["X-Admin-Mode"];
     } else {
       delete axios.defaults.headers.common["Authorization"];
       delete axios.defaults.headers.common["X-Admin-Mode"];
     }
   }, [state.token]);
 
-  // Axios interceptor to handle hardcoded admin requests
-  useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use(
-      (config) => {
-        const token = localStorage.getItem("shms_admin_token");
-        if (token && token.startsWith("hardcoded_admin_")) {
-          // For hardcoded admin, create a temporary backend admin token
-          // This is a special case where we'll create a fake admin session
-          config.headers["X-Admin-Mode"] = "hardcoded";
-          // Remove the fake token and don't send Authorization
-          delete config.headers["Authorization"];
-        } else if (token) {
-          config.headers["Authorization"] = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    const responseInterceptor = axios.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          // Only logout if it's not a hardcoded admin
-          const token = localStorage.getItem("shms_admin_token");
-          if (!token || !token.startsWith("hardcoded_admin_")) {
-            localStorage.removeItem("shms_admin_token");
-            window.location.href = "/login";
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    return () => {
-      axios.interceptors.request.eject(requestInterceptor);
-      axios.interceptors.response.eject(responseInterceptor);
-    };
-  }, []);
-
-  // Load user on app start - for hardcoded admin
+  // Load user on app start
   const loadUser = async () => {
     const token = state.token;
+
     if (token && token.startsWith("hardcoded_admin_")) {
       // If it's a hardcoded admin token, load from localStorage
       const storedUser = localStorage.getItem("shms_admin_user");
@@ -145,13 +107,15 @@ export const AuthProvider = ({ children }) => {
           const user = JSON.parse(storedUser);
           dispatch({
             type: "USER_LOADED",
-            payload: user,
+            payload: { user },
           });
           return;
         } catch (error) {
           console.error("Error parsing stored user:", error);
         }
       }
+      // If no stored user for hardcoded admin, logout
+      dispatch({ type: "AUTH_ERROR" });
     } else if (token) {
       // Try to load from backend for real tokens
       dispatch({ type: "USER_LOADING" });
@@ -165,7 +129,7 @@ export const AuthProvider = ({ children }) => {
 
         dispatch({
           type: "USER_LOADED",
-          payload: res.data.user,
+          payload: { user: res.data.user },
         });
       } catch (error) {
         console.error("Load user error:", error);
@@ -200,20 +164,21 @@ export const AuthProvider = ({ children }) => {
           studentId: null,
           profilePicture: null,
           lastLogin: new Date(),
-          isHardcoded: true, // Flag to identify hardcoded admin
+          isHardcoded: true,
         };
 
-        // Store user data for persistence
-        localStorage.setItem("shms_admin_user", JSON.stringify(adminUser));
+        // Create a fake token for hardcoded admin
+        const fakeToken = `hardcoded_admin_${Date.now()}`;
 
         dispatch({
           type: "LOGIN_SUCCESS",
-          payload: { user: adminUser },
+          payload: {
+            user: adminUser,
+            token: fakeToken,
+          },
         });
 
-        toast.success(`🚀 Welcome to SHMS Admin Panel, ${adminUser.name}!`, {
-          icon: "👑",
-        });
+        toast.success(`🚀 Welcome to SHMS Admin Panel, ${adminUser.name}!`);
         return { success: true };
       }
 
@@ -248,7 +213,6 @@ export const AuthProvider = ({ children }) => {
 
   // Logout
   const logout = () => {
-    localStorage.removeItem("shms_admin_user");
     dispatch({ type: "LOGOUT" });
     toast.info("Admin session ended. See you soon! 👋");
   };
@@ -259,12 +223,6 @@ export const AuthProvider = ({ children }) => {
       type: "UPDATE_USER",
       payload: userData,
     });
-
-    // Update stored user data if hardcoded
-    if (state.user?.isHardcoded) {
-      const updatedUser = { ...state.user, ...userData };
-      localStorage.setItem("shms_admin_user", JSON.stringify(updatedUser));
-    }
   };
 
   // Clear errors

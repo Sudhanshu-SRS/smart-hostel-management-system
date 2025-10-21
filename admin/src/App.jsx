@@ -29,6 +29,7 @@ import VisitorManagement from "./pages/Visitors/VisitorManagement";
 import Analytics from "./pages/Analytics/Analytics";
 import Settings from "./pages/Settings/Settings";
 import Reports from "./pages/Reports/Reports";
+import EntryExitManagement from "./pages/EntryExit/EntryExitManagement";
 
 // Enhanced admin theme
 const adminTheme = createTheme({
@@ -303,6 +304,16 @@ function App() {
                   <ProtectedRoute roles={["admin"]}>
                     <AdminLayout>
                       <Settings />
+                    </AdminLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/entry-exit"
+                element={
+                  <ProtectedRoute roles={["admin", "warden"]}>
+                    <AdminLayout>
+                      <EntryExitManagement />
                     </AdminLayout>
                   </ProtectedRoute>
                 }

@@ -338,13 +338,18 @@ const Dashboard = () => {
               fontWeight="bold"
               gutterBottom
               className="gradient-text"
+              component="h1"
             >
               Admin Dashboard
             </Typography>
-            <Typography variant="h6" sx={{ opacity: 0.9 }}>
+            <Typography variant="h6" sx={{ opacity: 0.9 }} component="h2">
               Welcome back, {user?.name}! Here's your system overview.
             </Typography>
-            <Typography variant="body1" sx={{ opacity: 0.8, mt: 1 }}>
+            <Typography
+              variant="body1"
+              sx={{ opacity: 0.8, mt: 1 }}
+              component="div"
+            >
               Comprehensive control panel for Smart Hostel Management System
             </Typography>
           </Box>

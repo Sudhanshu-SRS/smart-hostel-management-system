@@ -34,6 +34,7 @@ import {
   Settings,
   Visibility,
   Home,
+  QrCodeScanner,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -128,6 +129,13 @@ const Layout = ({ children }) => {
       path: "/users",
       roles: ["warden", "admin"],
       description: "User management",
+    },
+    {
+      text: "Entry/Exit",
+      icon: <QrCodeScanner />,
+      path: "/entry-exit",
+      roles: ["student", "warden", "admin"],
+      description: "QR-based hostel access",
     },
   ];
 

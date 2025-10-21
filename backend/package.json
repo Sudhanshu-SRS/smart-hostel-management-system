@@ -19,12 +19,18 @@
     "express-rate-limit": "^6.10.0",
     "express-validator": "^7.0.1",
     "helmet": "^7.0.0",
+    "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.5.0",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.2.1",
     "nodemailer": "^6.10.1",
+    "qrcode": "^1.5.4",
     "razorpay": "^2.9.2",
-    "socket.io": "^4.7.2"
+    "sharp": "^0.34.2",
+    "socket.io": "^4.7.2",
+    "twilio": "^5.7.1",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

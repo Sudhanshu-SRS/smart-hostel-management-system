@@ -27,6 +27,7 @@ import Complaints from "./pages/Complaints/Complaints";
 import Visitors from "./pages/Visitors/Visitors";
 import Users from "./pages/Users/Users";
 import Profile from "./pages/Profile/Profile";
+import EntryExitDashboard from "./pages/EntryExit/EntryExitDashboard";
 
 // Fixed import path
 import { formatCurrency, formatTimeAgo, getStatusColor } from "./utils/helpers"; // Fixed path from ../utils to ./utils
@@ -254,6 +255,16 @@ function App() {
                   <ProtectedRoute>
                     <Layout>
                       <Profile />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/entry-exit"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <EntryExitDashboard />
                     </Layout>
                   </ProtectedRoute>
                 }
