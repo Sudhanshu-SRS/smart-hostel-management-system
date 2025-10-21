@@ -5,6 +5,8 @@ const Payment = require("../models/payment");
 const User = require("../models/db");
 const Room = require("../models/room");
 const { auth, authorize } = require("../middleware/authmiddleware");
+const paymentNotificationService = require("../services/paymentNotificationService");
+const paymentScheduler = require("../services/paymentScheduler");
 
 const router = express.Router();
 
@@ -98,53 +100,62 @@ router.get("/:id", auth, async (req, res) => {
 // @access  Private
 router.post("/create-order", auth, async (req, res) => {
   try {
-    const { amount, paymentType, description } = req.body;
+    const { amount, paymentType, description, roomId } = req.body;
 
-    if (!amount || amount <= 0) {
+    // Validate required fields
+    if (!amount || !paymentType) {
       return res.status(400).json({
         success: false,
-        message: "Invalid amount",
+        message: "Amount and payment type are required",
       });
     }
 
+    // Create payment record with pending status
+    const paymentData = {
+      user: req.user._id,
+      amount: parseFloat(amount),
+      paymentType,
+      description: description || `${paymentType.replace("_", " ")} payment`,
+      status: "pending",
+      dueDate: new Date(),
+    };
+
+    if (roomId) {
+      paymentData.room = roomId;
+    }
+
+    const payment = new Payment(paymentData);
+    await payment.save();
+
     // Create Razorpay order
     const options = {
-      amount: amount * 100, // Razorpay expects amount in paise
+      amount: Math.round(parseFloat(amount) * 100), // Convert to paise
       currency: "INR",
-      receipt: `receipt_${Date.now()}`,
+      receipt: `rcpt_${payment._id}`,
       notes: {
-        userId: req.user._id,
-        paymentType,
-        description,
+        paymentId: payment._id.toString(),
+        userId: req.user._id.toString(),
+        paymentType: paymentType,
       },
     };
 
-    const order = await razorpay.orders.create(options);
+    const razorpayOrder = await razorpay.orders.create(options);
 
-    // Create payment record
-    const payment = new Payment({
-      user: req.user._id,
-      room: req.user.room,
-      amount,
-      paymentType,
-      description,
-      razorpayOrderId: order.id,
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      status: "pending",
-    });
-
+    // Update payment with Razorpay order ID
+    payment.razorpayOrderId = razorpayOrder.id;
     await payment.save();
 
     res.json({
       success: true,
-      order,
-      paymentId: payment._id,
+      order: razorpayOrder,
+      payment: payment,
+      key: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
     console.error("Create order error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to create order",
+      message: "Failed to create payment order",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
@@ -162,6 +173,28 @@ router.post("/verify", auth, async (req, res) => {
       paymentId,
     } = req.body;
 
+    // Validate required fields
+    if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature ||
+      !paymentId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required payment verification data",
+      });
+    }
+
+    // Find the payment record
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment record not found",
+      });
+    }
+
     // Verify signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
@@ -170,43 +203,39 @@ router.post("/verify", auth, async (req, res) => {
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
+      // Mark payment as failed
+      payment.status = "failed";
+      await payment.save();
+
       return res.status(400).json({
         success: false,
-        message: "Invalid payment signature",
+        message: "Payment verification failed - Invalid signature",
       });
     }
 
-    // Update payment record
-    const payment = await Payment.findById(paymentId);
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: "Payment not found",
-      });
-    }
-
+    // Payment successful - update payment record
+    payment.status = "completed";
     payment.razorpayPaymentId = razorpay_payment_id;
     payment.razorpaySignature = razorpay_signature;
-    payment.status = "completed";
     payment.paidDate = new Date();
+    payment.paymentMethod = "razorpay";
+
     await payment.save();
 
-    // Emit real-time notification
-    const io = req.app.get("io");
-    io.emit("paymentCompleted", {
-      paymentId: payment._id,
-      userId: payment.user,
-      amount: payment.amount,
-      paymentType: payment.paymentType,
-    });
+    // Send payment confirmation email
+    await paymentNotificationService.sendPaymentConfirmation(payment._id);
+
+    // Populate user and room data for response
+    await payment.populate("user", "name email studentId phoneNumber");
+    await payment.populate("room", "roomNumber building floor");
 
     res.json({
       success: true,
       message: "Payment verified successfully",
-      payment,
+      payment: payment,
     });
   } catch (error) {
-    console.error("Verify payment error:", error);
+    console.error("Payment verification error:", error);
     res.status(500).json({
       success: false,
       message: "Payment verification failed",
@@ -214,6 +243,112 @@ router.post("/verify", auth, async (req, res) => {
     });
   }
 });
+
+// @route   POST /api/payments/webhook
+// @desc    Handle Razorpay webhooks
+// @access  Public (but verified)
+router.post("/webhook", async (req, res) => {
+  try {
+    const signature = req.headers["x-razorpay-signature"];
+    const body = JSON.stringify(req.body);
+
+    // Verify webhook signature
+    const expectedSignature = crypto
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET
+      )
+      .update(body)
+      .digest("hex");
+
+    if (signature !== expectedSignature) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid webhook signature",
+      });
+    }
+
+    const { event, payload } = req.body;
+
+    switch (event) {
+      case "payment.captured":
+        await handlePaymentCaptured(payload.payment.entity);
+        break;
+      case "payment.failed":
+        await handlePaymentFailed(payload.payment.entity);
+        break;
+      case "refund.created":
+        await handleRefundCreated(payload.refund.entity);
+        break;
+      default:
+        console.log(`Unhandled webhook event: ${event}`);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Webhook error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Webhook processing failed",
+    });
+  }
+});
+
+// Helper function to handle payment captured
+async function handlePaymentCaptured(paymentEntity) {
+  try {
+    const payment = await Payment.findOne({
+      razorpayOrderId: paymentEntity.order_id,
+    });
+
+    if (payment && payment.status === "pending") {
+      payment.status = "completed";
+      payment.razorpayPaymentId = paymentEntity.id;
+      payment.paidDate = new Date();
+      await payment.save();
+
+      console.log(`Payment captured for order: ${paymentEntity.order_id}`);
+    }
+  } catch (error) {
+    console.error("Error handling payment captured:", error);
+  }
+}
+
+// Helper function to handle payment failed
+async function handlePaymentFailed(paymentEntity) {
+  try {
+    const payment = await Payment.findOne({
+      razorpayOrderId: paymentEntity.order_id,
+    });
+
+    if (payment) {
+      payment.status = "failed";
+      await payment.save();
+
+      console.log(`Payment failed for order: ${paymentEntity.order_id}`);
+    }
+  } catch (error) {
+    console.error("Error handling payment failed:", error);
+  }
+}
+
+// Helper function to handle refund created
+async function handleRefundCreated(refundEntity) {
+  try {
+    const payment = await Payment.findOne({
+      razorpayPaymentId: refundEntity.payment_id,
+    });
+
+    if (payment) {
+      payment.status = "refunded";
+      await payment.save();
+
+      console.log(`Refund created for payment: ${refundEntity.payment_id}`);
+    }
+  } catch (error) {
+    console.error("Error handling refund created:", error);
+  }
+}
 
 // @route   POST /api/payments
 // @desc    Create manual payment (Admin/Warden)
@@ -390,6 +525,381 @@ router.get(
       res.status(500).json({
         success: false,
         message: "Server error",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   GET /api/payments/stats/my-summary
+// @desc    Get user's own payment statistics
+// @access  Private (students can access their own stats)
+router.get("/stats/my-summary", auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const stats = await Payment.aggregate([
+      { $match: { user: userId } },
+      {
+        $group: {
+          _id: null,
+          totalPayments: { $sum: 1 },
+          totalAmount: { $sum: "$amount" },
+          completedPayments: {
+            $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+          },
+          pendingPayments: {
+            $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] },
+          },
+          failedPayments: {
+            $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] },
+          },
+          completedAmount: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "completed"] }, "$amount", 0],
+            },
+          },
+          pendingAmount: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    const paymentStats = stats[0] || {
+      totalPayments: 0,
+      totalAmount: 0,
+      completedPayments: 0,
+      pendingPayments: 0,
+      failedPayments: 0,
+      completedAmount: 0,
+      pendingAmount: 0,
+    };
+
+    res.json({
+      success: true,
+      stats: paymentStats,
+    });
+  } catch (error) {
+    console.error("Get user payment stats error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+// @route   POST /api/payments/manual
+// @desc    Create manual payment (admin only)
+// @access  Admin/Warden
+router.post("/manual", auth, authorize("admin", "warden"), async (req, res) => {
+  try {
+    const { userId, amount, paymentType, paymentMethod, description, roomId } =
+      req.body;
+
+    // Validate required fields
+    if (!userId || !amount || !paymentType || !paymentMethod) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "User ID, amount, payment type, and payment method are required",
+      });
+    }
+
+    // Validate user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Create payment record
+    const paymentData = {
+      user: userId,
+      amount: parseFloat(amount),
+      paymentType,
+      paymentMethod,
+      description:
+        description || `Manual ${paymentType.replace("_", " ")} payment`,
+      status: "completed",
+      dueDate: new Date(),
+      paidDate: new Date(),
+    };
+
+    if (roomId) {
+      paymentData.room = roomId;
+    }
+
+    const payment = new Payment(paymentData);
+    await payment.save();
+
+    // Populate user and room data
+    await payment.populate("user", "name email studentId phoneNumber");
+    await payment.populate("room", "roomNumber building floor");
+
+    res.json({
+      success: true,
+      message: "Manual payment created successfully",
+      payment: payment,
+    });
+  } catch (error) {
+    console.error("Create manual payment error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create manual payment",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+// @route   POST /api/payments/:id/refund
+// @desc    Process refund (admin only)
+// @access  Admin/Warden
+router.post(
+  "/:id/refund",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const { amount: refundAmount, reason } = req.body;
+      const payment = await Payment.findById(req.params.id);
+
+      if (!payment) {
+        return res.status(404).json({
+          success: false,
+          message: "Payment not found",
+        });
+      }
+
+      if (payment.status !== "completed") {
+        return res.status(400).json({
+          success: false,
+          message: "Can only refund completed payments",
+        });
+      }
+
+      let refundAmountToProcess = refundAmount || payment.finalAmount;
+
+      // Process refund through Razorpay if it was a Razorpay payment
+      if (payment.paymentMethod === "razorpay" && payment.razorpayPaymentId) {
+        try {
+          const refund = await razorpay.payments.refund(
+            payment.razorpayPaymentId,
+            {
+              amount: Math.round(refundAmountToProcess * 100), // Convert to paise
+              notes: {
+                reason: reason || "Refund processed by admin",
+                refundedBy: req.user._id.toString(),
+              },
+            }
+          );
+
+          payment.status = "refunded";
+          payment.description = `${payment.description} - Refunded: ₹${refundAmountToProcess}`;
+          await payment.save();
+
+          res.json({
+            success: true,
+            message: "Refund processed successfully",
+            refund: refund,
+            payment: payment,
+          });
+        } catch (razorpayError) {
+          console.error("Razorpay refund error:", razorpayError);
+          res.status(500).json({
+            success: false,
+            message: "Failed to process refund through Razorpay",
+            error: razorpayError.message,
+          });
+        }
+      } else {
+        // Manual refund for non-Razorpay payments
+        payment.status = "refunded";
+        payment.description = `${payment.description} - Manual Refund: ₹${refundAmountToProcess}`;
+        await payment.save();
+
+        res.json({
+          success: true,
+          message: "Manual refund processed successfully",
+          payment: payment,
+        });
+      }
+    } catch (error) {
+      console.error("Process refund error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to process refund",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   GET /api/payments/overdue
+// @desc    Get overdue payments
+// @access  Admin/Warden
+router.get("/overdue", auth, authorize("admin", "warden"), async (req, res) => {
+  try {
+    const overduePayments = await Payment.find({
+      status: "pending",
+      dueDate: { $lt: new Date() },
+    })
+      .populate("user", "name email studentId phoneNumber")
+      .populate("room", "roomNumber building floor")
+      .sort({ dueDate: 1 });
+
+    res.json({
+      success: true,
+      count: overduePayments.length,
+      payments: overduePayments,
+    });
+  } catch (error) {
+    console.error("Get overdue payments error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch overdue payments",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+// @route   GET /api/payments/analytics
+// @desc    Get payment analytics
+// @access  Admin/Warden
+router.get(
+  "/analytics",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const filter = {};
+
+      if (startDate && endDate) {
+        filter.createdAt = {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        };
+      }
+
+      // Get analytics data
+      const [
+        totalRevenue,
+        pendingPayments,
+        completedPayments,
+        overduePayments,
+        paymentsByType,
+        monthlyRevenue,
+      ] = await Promise.all([
+        Payment.aggregate([
+          { $match: { ...filter, status: "completed" } },
+          { $group: { _id: null, total: { $sum: "$finalAmount" } } },
+        ]),
+        Payment.countDocuments({ ...filter, status: "pending" }),
+        Payment.countDocuments({ ...filter, status: "completed" }),
+        Payment.countDocuments({
+          ...filter,
+          status: "pending",
+          dueDate: { $lt: new Date() },
+        }),
+        Payment.aggregate([
+          { $match: { ...filter, status: "completed" } },
+          {
+            $group: {
+              _id: "$paymentType",
+              total: { $sum: "$finalAmount" },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        Payment.aggregate([
+          { $match: { ...filter, status: "completed" } },
+          {
+            $group: {
+              _id: {
+                year: { $year: "$paidDate" },
+                month: { $month: "$paidDate" },
+              },
+              revenue: { $sum: "$finalAmount" },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { "_id.year": 1, "_id.month": 1 } },
+        ]),
+      ]);
+
+      const analytics = {
+        totalRevenue: totalRevenue[0]?.total || 0,
+        pendingPayments,
+        completedPayments,
+        overduePayments,
+        paymentsByType,
+        monthlyRevenue,
+        totalPayments: pendingPayments + completedPayments,
+      };
+
+      res.json({
+        success: true,
+        analytics,
+      });
+    } catch (error) {
+      console.error("Get payment analytics error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch payment analytics",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   POST /api/payments/send-reminders
+// @desc    Send payment reminders manually
+// @access  Admin/Warden
+router.post(
+  "/send-reminders",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const result = await paymentScheduler.sendManualReminders();
+      res.json(result);
+    } catch (error) {
+      console.error("Send reminders error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to send payment reminders",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   POST /api/payments/send-overdue-alerts
+// @desc    Send overdue alerts to admins manually
+// @access  Admin/Warden
+router.post(
+  "/send-overdue-alerts",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const result = await paymentScheduler.sendManualOverdueAlerts();
+      res.json(result);
+    } catch (error) {
+      console.error("Send overdue alerts error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to send overdue alerts",
         error:
           process.env.NODE_ENV === "development" ? error.message : undefined,
       });
