@@ -4,6 +4,7 @@ const User = require("../models/db");
 const { auth, authorize } = require("../middleware/authmiddleware");
 const { validateComplaint } = require("../middleware/validation");
 const emailService = require("../services/emailService");
+const notificationService = require("../services/notificationService");
 
 const router = express.Router();
 
@@ -109,9 +110,18 @@ router.post("/", auth, validateComplaint, async (req, res) => {
       { path: "room", select: "roomNumber building floor" },
     ]);
 
+    // Send notification to staff
+    await notificationService.sendComplaintNotification(complaint, "new");
+
     // Emit real-time notification to wardens and admins
     const io = req.app.get("io");
     io.emit("newComplaint", complaint);
+    notificationService.emitToRole(
+      io,
+      ["admin", "warden"],
+      "newComplaint",
+      complaint
+    );
 
     res.status(201).json({
       success: true,
@@ -181,9 +191,31 @@ router.put("/:id", auth, async (req, res) => {
       { path: "room", select: "roomNumber building floor" },
     ]);
 
+    // Send notifications based on status change
+    if (req.body.status === "resolved" && complaint.status !== "resolved") {
+      await notificationService.sendComplaintNotification(
+        updatedComplaint,
+        "resolved"
+      );
+    }
+
     // Emit real-time update
     const io = req.app.get("io");
     io.emit("complaintUpdated", updatedComplaint);
+    notificationService.emitToUser(
+      io,
+      updatedComplaint.user._id,
+      "complaintUpdated",
+      updatedComplaint
+    );
+    if (updatedComplaint.assignedTo) {
+      notificationService.emitToUser(
+        io,
+        updatedComplaint.assignedTo._id,
+        "complaintUpdated",
+        updatedComplaint
+      );
+    }
 
     // Send email notification if complaint is resolved or in progress
     if (
@@ -249,9 +281,27 @@ router.post(
         { path: "room", select: "roomNumber building floor" },
       ]);
 
+      // Send assignment notification
+      await notificationService.sendComplaintNotification(
+        complaint,
+        "assigned"
+      );
+
       // Emit real-time notification
       const io = req.app.get("io");
       io.emit("complaintAssigned", complaint);
+      notificationService.emitToUser(
+        io,
+        complaint.user._id,
+        "complaintAssigned",
+        complaint
+      );
+      notificationService.emitToUser(
+        io,
+        assignedTo,
+        "complaintAssigned",
+        complaint
+      );
 
       res.json({
         success: true,
@@ -530,6 +580,380 @@ router.get(
       });
     } catch (error) {
       console.error("Get complaint stats error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   POST /api/complaints/bulk-assign
+// @desc    Bulk assign complaints to staff members
+// @access  Admin/Warden
+router.post(
+  "/bulk-assign",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const { complaintIds, assignedTo } = req.body;
+
+      if (
+        !complaintIds ||
+        !Array.isArray(complaintIds) ||
+        complaintIds.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Complaint IDs are required",
+        });
+      }
+
+      if (!assignedTo) {
+        return res.status(400).json({
+          success: false,
+          message: "Assignee is required",
+        });
+      }
+
+      // Verify assignee exists and has appropriate role
+      const assignee = await User.findById(assignedTo);
+      if (!assignee || !["warden", "admin"].includes(assignee.role)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid assignee",
+        });
+      }
+
+      const result = await Complaint.updateMany(
+        { _id: { $in: complaintIds } },
+        {
+          assignedTo: assignedTo,
+          status: "in_progress",
+        }
+      );
+
+      const updatedComplaints = await Complaint.find({
+        _id: { $in: complaintIds },
+      })
+        .populate("user", "name email studentId")
+        .populate("assignedTo", "name email role");
+
+      // Emit real-time notifications
+      const io = req.app.get("io");
+      io.emit("complaintsBulkAssigned", {
+        complaints: updatedComplaints,
+        assignedTo: assignee,
+      });
+
+      res.json({
+        success: true,
+        message: `${result.modifiedCount} complaints assigned successfully`,
+        modifiedCount: result.modifiedCount,
+      });
+    } catch (error) {
+      console.error("Bulk assign error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   POST /api/complaints/bulk-update-status
+// @desc    Bulk update complaint status
+// @access  Admin/Warden
+router.post(
+  "/bulk-update-status",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const { complaintIds, status } = req.body;
+
+      if (
+        !complaintIds ||
+        !Array.isArray(complaintIds) ||
+        complaintIds.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Complaint IDs are required",
+        });
+      }
+
+      if (
+        !status ||
+        !["open", "in_progress", "resolved", "closed", "rejected"].includes(
+          status
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid status is required",
+        });
+      }
+
+      const updateData = { status };
+      if (status === "resolved") {
+        updateData.actualResolutionDate = new Date();
+      }
+
+      const result = await Complaint.updateMany(
+        { _id: { $in: complaintIds } },
+        updateData
+      );
+
+      const updatedComplaints = await Complaint.find({
+        _id: { $in: complaintIds },
+      })
+        .populate("user", "name email studentId")
+        .populate("assignedTo", "name email role");
+
+      // Emit real-time notifications
+      const io = req.app.get("io");
+      io.emit("complaintsBulkUpdated", {
+        complaints: updatedComplaints,
+        status,
+      });
+
+      res.json({
+        success: true,
+        message: `${result.modifiedCount} complaints updated successfully`,
+        modifiedCount: result.modifiedCount,
+      });
+    } catch (error) {
+      console.error("Bulk update status error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   GET /api/complaints/overdue
+// @desc    Get overdue complaints
+// @access  Admin/Warden
+router.get("/overdue", auth, authorize("admin", "warden"), async (req, res) => {
+  try {
+    console.log("🔍 Fetching overdue complaints...");
+    const currentDate = new Date();
+    const urgentThreshold = new Date(currentDate - 24 * 60 * 60 * 1000); // 24 hours ago
+    const normalThreshold = new Date(currentDate - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+
+    console.log("📅 Current date:", currentDate);
+    console.log("⏰ Urgent threshold:", urgentThreshold);
+    console.log("⏰ Normal threshold:", normalThreshold);
+
+    const overdueComplaints = await Complaint.find({
+      status: { $in: ["open", "in_progress"] },
+      $or: [
+        {
+          priority: "urgent",
+          createdAt: { $lt: urgentThreshold },
+        },
+        {
+          priority: { $in: ["high", "medium", "low"] },
+          createdAt: { $lt: normalThreshold },
+        },
+      ],
+    })
+      .populate("user", "name email studentId phoneNumber")
+      .populate("assignedTo", "name email role")
+      .populate({
+        path: "room",
+        select: "roomNumber building floor",
+        model: "Room",
+      })
+      .sort({ createdAt: 1 });
+
+    console.log("📊 Found overdue complaints:", overdueComplaints.length);
+
+    res.json({
+      success: true,
+      count: overdueComplaints.length,
+      complaints: overdueComplaints,
+    });
+  } catch (error) {
+    console.error("❌ Get overdue complaints error:", error);
+    console.error("❌ Error stack:", error.stack);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+// @route   POST /api/complaints/:id/escalate
+// @desc    Escalate complaint to higher priority
+// @access  Admin/Warden
+router.post(
+  "/:id/escalate",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
+
+      const complaint = await Complaint.findById(req.params.id);
+      if (!complaint) {
+        return res.status(404).json({
+          success: false,
+          message: "Complaint not found",
+        });
+      }
+
+      // Escalate priority
+      const priorityLevels = ["low", "medium", "high", "urgent"];
+      const currentIndex = priorityLevels.indexOf(complaint.priority);
+
+      if (currentIndex < priorityLevels.length - 1) {
+        complaint.priority = priorityLevels[currentIndex + 1];
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Complaint is already at highest priority",
+        });
+      }
+
+      // Add escalation comment
+      complaint.comments.push({
+        user: req.user._id,
+        comment: `Complaint escalated to ${
+          complaint.priority
+        } priority. Reason: ${reason || "No reason provided"}`,
+        isInternal: true,
+      });
+
+      await complaint.save();
+
+      await complaint.populate([
+        { path: "user", select: "name email studentId phoneNumber" },
+        { path: "assignedTo", select: "name email role" },
+        { path: "room", select: "roomNumber building floor" },
+      ]);
+
+      // Emit real-time notification
+      const io = req.app.get("io");
+      io.emit("complaintEscalated", complaint);
+
+      res.json({
+        success: true,
+        message: "Complaint escalated successfully",
+        complaint,
+      });
+    } catch (error) {
+      console.error("Escalate complaint error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   GET /api/complaints/sla-metrics
+// @desc    Get SLA compliance metrics
+// @access  Admin/Warden
+router.get(
+  "/sla-metrics",
+  auth,
+  authorize("admin", "warden"),
+  async (req, res) => {
+    try {
+      console.log("📊 Fetching SLA metrics...");
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      console.log("📅 Thirty days ago:", thirtyDaysAgo);
+
+      const complaints = await Complaint.find({
+        createdAt: { $gte: thirtyDaysAgo },
+        status: { $in: ["resolved", "closed"] },
+      });
+
+      console.log("📋 Found resolved complaints:", complaints.length);
+
+      const slaMetrics = {
+        urgent: { total: 0, withinSLA: 0, slaTarget: 24 }, // 24 hours
+        high: { total: 0, withinSLA: 0, slaTarget: 72 }, // 3 days
+        medium: { total: 0, withinSLA: 0, slaTarget: 168 }, // 7 days
+        low: { total: 0, withinSLA: 0, slaTarget: 336 }, // 14 days
+      };
+
+      complaints.forEach((complaint) => {
+        console.log(`🔍 Processing complaint ${complaint._id}:`, {
+          priority: complaint.priority,
+          createdAt: complaint.createdAt,
+          actualResolutionDate: complaint.actualResolutionDate,
+          status: complaint.status,
+        });
+
+        if (!complaint.actualResolutionDate) {
+          console.log(
+            `⚠️ Complaint ${complaint._id} has no actualResolutionDate`
+          );
+          return;
+        }
+
+        const resolutionTime =
+          (complaint.actualResolutionDate - complaint.createdAt) /
+          (1000 * 60 * 60); // in hours
+        const priority = complaint.priority;
+
+        console.log(
+          `⏱️ Complaint ${complaint._id} resolution time: ${resolutionTime}h`
+        );
+
+        if (slaMetrics[priority]) {
+          slaMetrics[priority].total++;
+          if (resolutionTime <= slaMetrics[priority].slaTarget) {
+            slaMetrics[priority].withinSLA++;
+          }
+          console.log(`📊 Updated ${priority} metrics:`, slaMetrics[priority]);
+        }
+      });
+
+      // Calculate compliance percentages
+      Object.keys(slaMetrics).forEach((priority) => {
+        const metric = slaMetrics[priority];
+        metric.complianceRate =
+          metric.total > 0 ? (metric.withinSLA / metric.total) * 100 : 0;
+      });
+
+      // Overall SLA compliance
+      const totalComplaints = Object.values(slaMetrics).reduce(
+        (sum, m) => sum + m.total,
+        0
+      );
+      const totalWithinSLA = Object.values(slaMetrics).reduce(
+        (sum, m) => sum + m.withinSLA,
+        0
+      );
+      const overallCompliance =
+        totalComplaints > 0 ? (totalWithinSLA / totalComplaints) * 100 : 0;
+
+      console.log("✅ SLA metrics calculated successfully");
+
+      res.json({
+        success: true,
+        slaMetrics,
+        overallCompliance,
+        period: "Last 30 days",
+      });
+    } catch (error) {
+      console.error("❌ Get SLA metrics error:", error);
+      console.error("❌ Error stack:", error.stack);
       res.status(500).json({
         success: false,
         message: "Server error",
