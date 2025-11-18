@@ -141,8 +141,11 @@ router.get("/:id", auth, async (req, res) => {
 // @access  Admin only
 router.post("/", auth, authorize("admin"), validateRoom, async (req, res) => {
   try {
+    console.log("📦 Creating room with data:", req.body);
     const room = new Room(req.body);
     await room.save();
+
+    console.log("✅ Room created successfully:", room._id);
 
     // Emit real-time update
     const io = req.app.get("io");
@@ -154,13 +157,38 @@ router.post("/", auth, authorize("admin"), validateRoom, async (req, res) => {
       room,
     });
   } catch (error) {
-    console.error("Create room error:", error);
+    console.error("❌ Create room error:", error.message);
+    console.error("📋 Error details:", {
+      name: error.name,
+      code: error.code,
+      message: error.message,
+      ...(error.errors && {
+        validationErrors: Object.keys(error.errors).map((key) => ({
+          field: key,
+          message: error.errors[key].message,
+        })),
+      }),
+    });
+
     if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({
         success: false,
-        message: "Room number already exists",
+        message: `${field} already exists`,
       });
     }
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: Object.keys(error.errors).map((key) => ({
+          field: key,
+          message: error.errors[key].message,
+        })),
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -254,6 +282,8 @@ router.delete("/:id", auth, authorize("admin"), async (req, res) => {
 // @access  Student
 router.post("/:id/book", auth, authorize("student"), async (req, res) => {
   try {
+    console.log(`📚 Student ${req.user._id} attempting to book room ${req.params.id}`);
+    
     const room = await Room.findById(req.params.id);
     if (!room) {
       return res.status(404).json({
@@ -279,8 +309,13 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
       });
     }
 
+    // Get the user to check if they already have a room
+    const user = await User.findById(req.user._id);
+    console.log(`👤 User room status:`, user.room);
+    
     // Check if user already has a room
-    if (req.user.room) {
+    if (user && user.room && user.room !== null) {
+      console.log(`⚠️  User already has room: ${user.room}`);
       return res.status(400).json({
         success: false,
         message:
@@ -308,6 +343,8 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
       (bed) => bed.bedNumber === bedToAllocate.bedNumber
     );
 
+    console.log(`🛏️ Allocating bed ${bedToAllocate.bedNumber} to student ${req.user._id}`);
+    
     room.beds[bedIndex].isOccupied = true;
     room.beds[bedIndex].occupant = req.user._id;
     room.beds[bedIndex].allocationDate = new Date();
@@ -322,6 +359,8 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
       path: "beds.occupant",
       select: "name email phoneNumber studentId",
     });
+
+    console.log(`✅ Room ${room._id} booked successfully for student ${req.user._id}`);
 
     // Emit real-time update
     const io = req.app.get("io");
@@ -342,12 +381,23 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
       allocatedBed: bedToAllocate.bedNumber,
     });
   } catch (error) {
-    console.error("Book room error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
+    console.error("❌ Book room error:", error.message);
+    console.error("📋 Error stack:", error.stack);
+    
+    // Send detailed error response in development
+    if (process.env.NODE_ENV === "development") {
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message,
+        stack: error.stack,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
   }
 });
 

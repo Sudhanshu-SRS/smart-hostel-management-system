@@ -207,7 +207,15 @@ const RoomManagement = () => {
 
   const handleCreateRoom = async () => {
     try {
-      const response = await api.post("/rooms", roomForm);
+      // Ensure numeric fields are properly converted
+      const roomData = {
+        ...roomForm,
+        floor: parseInt(roomForm.floor) || 0,
+        capacity: parseInt(roomForm.capacity) || 1,
+        monthlyRent: parseFloat(roomForm.monthlyRent) || 0,
+        securityDeposit: parseFloat(roomForm.securityDeposit) || 0,
+      };
+      const response = await api.post("/rooms", roomData);
       if (response.data.success) {
         showSnackbar("Room created successfully", "success");
         setOpenCreateRoom(false);
@@ -222,18 +230,30 @@ const RoomManagement = () => {
           amenities: [],
           description: "",
         });
+        fetchRooms();
       }
     } catch (error) {
       showSnackbar(
         error.response?.data?.message || "Error creating room",
         "error"
       );
+      console.error("Error details:", error.response?.data);
     }
   };
 
   const handleBulkCreate = async () => {
     try {
-      const response = await api.post("/rooms/bulk-create", bulkForm);
+      // Ensure numeric fields are properly converted
+      const bulkData = {
+        ...bulkForm,
+        floor: parseInt(bulkForm.floor) || 0,
+        startRoomNumber: parseInt(bulkForm.startRoomNumber) || 0,
+        endRoomNumber: parseInt(bulkForm.endRoomNumber) || 0,
+        capacity: parseInt(bulkForm.capacity) || 1,
+        monthlyRent: parseFloat(bulkForm.monthlyRent) || 0,
+        securityDeposit: parseFloat(bulkForm.securityDeposit) || 0,
+      };
+      const response = await api.post("/rooms/bulk-create", bulkData);
       if (response.data.success) {
         showSnackbar(response.data.message, "success");
         setOpenBulkCreate(false);
@@ -249,12 +269,14 @@ const RoomManagement = () => {
           amenities: [],
           description: "",
         });
+        fetchRooms();
       }
     } catch (error) {
       showSnackbar(
         error.response?.data?.message || "Error creating rooms",
         "error"
       );
+      console.error("Error details:", error.response?.data);
     }
   };
 

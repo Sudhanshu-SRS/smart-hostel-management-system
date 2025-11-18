@@ -17,6 +17,7 @@ import {
   MenuItem,
   Tooltip,
   Divider,
+  Snackbar,
 } from "@mui/material";
 import {
   Hotel,
@@ -36,6 +37,11 @@ const Rooms = () => {
   const [selectedBuilding, setSelectedBuilding] = useState("all");
   const [floors, setFloors] = useState([]);
   const [buildings, setBuildings] = useState([]);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "info",
+  });
   const { user } = useAuth();
 
   useEffect(() => {
@@ -121,6 +127,14 @@ const Rooms = () => {
   };
 
   const stats = getRoomStats();
+
+  const showSnackbar = (message, severity = "info") => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
 
   if (loading) {
     return (
@@ -393,9 +407,30 @@ const Rooms = () => {
                         variant="contained"
                         fullWidth
                         sx={{ mt: 1 }}
-                        onClick={() => {
-                          // Handle room booking
-                          console.log("Book room:", room._id);
+                        onClick={async () => {
+                          try {
+                            console.log("Book room:", room._id);
+                            const response = await roomsAPI.bookRoom(room._id);
+                            if (response.data.success) {
+                              showSnackbar(
+                                "Room booked successfully!",
+                                "success"
+                              );
+                              fetchRooms(); // Refresh room list
+                            } else {
+                              showSnackbar(
+                                response.data.message || "Failed to book room",
+                                "error"
+                              );
+                            }
+                          } catch (error) {
+                            console.error("Book room error:", error);
+                            showSnackbar(
+                              error.response?.data?.message ||
+                                "Error booking room",
+                              "error"
+                            );
+                          }
                         }}
                       >
                         Book Room
@@ -432,6 +467,22 @@ const Rooms = () => {
           </Grid>
         )}
       </Grid>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

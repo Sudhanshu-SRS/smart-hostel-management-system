@@ -39,7 +39,46 @@ const io = socketIo(server, {
   },
 });
 
-// Security middleware
+// CORS configuration - MUST be FIRST middleware (before helmet, compression, rate limiting)
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      "http://localhost:3000", // Frontend
+      "http://localhost:3001", // Admin Panel
+      "http://localhost:5173", // Vite dev server
+      "http://127.0.0.1:3000", // Alternative frontend
+      "http://127.0.0.1:3001", // Alternative admin panel
+      "http://127.0.0.1:5173", // Alternative Vite
+    ];
+
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: [
+    "Origin",
+    "X-Requested-With",
+    "Content-Type",
+    "Accept",
+    "Authorization",
+    "X-Admin-Mode", // For hardcoded admin requests
+  ],
+  maxAge: 86400, // 24 hours
+};
+
+// Apply CORS BEFORE any other middleware
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly for all routes
+app.options("*", cors(corsOptions));
+
+// Security middleware (AFTER CORS)
 app.use(helmet());
 app.use(compression());
 
@@ -53,29 +92,6 @@ const limiter = rateLimit({
   },
 });
 app.use("/api/", limiter);
-
-// CORS configuration
-const corsOptions = {
-  origin: [
-    "http://localhost:3000", // Frontend
-    "http://localhost:3001", // Admin Panel
-    "http://127.0.0.1:3000", // Alternative frontend
-    "http://127.0.0.1:3001", // Alternative admin panel
-  ],
-  credentials: true,
-  optionsSuccessStatus: 200,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: [
-    "Origin",
-    "X-Requested-With",
-    "Content-Type",
-    "Accept",
-    "Authorization",
-    "X-Admin-Mode", // For hardcoded admin requests
-  ],
-};
-
-app.use(cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
