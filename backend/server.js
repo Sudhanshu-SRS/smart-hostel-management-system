@@ -22,6 +22,8 @@ const dashboardRoutes = require("./routes/DashboardR");
 const gateRoutes = require("./routes/gateRoutes");
 const messFeedbackRoutes = require("./routes/messFeedbackRoutes");
 const reportRoutes = require("./routes/ReportR");
+const vacationRequestRoutes = require("./routes/vacationRequestRoutes");
+const chatbotRoutes = require("./routes/chatbotR");
 
 const app = express();
 const server = http.createServer(app);
@@ -82,13 +84,25 @@ app.options("*", cors(corsOptions));
 app.use(helmet());
 app.use(compression());
 
-// Rate limiting
+// Rate limiting - more lenient for development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 1000, // Increased from 100 to 1000 for development
   message: {
     success: false,
     message: "Too many requests from this IP, please try again later.",
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => {
+    // Skip rate limiting for specific routes during development
+    if (process.env.NODE_ENV === "development") {
+      // Allow all GET requests to bypass rate limiting in dev
+      if (req.method === "GET") {
+        return true;
+      }
+    }
+    return false;
   },
 });
 app.use("/api/", limiter);
@@ -156,6 +170,8 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/gates", gateRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/mess-feedback", messFeedbackRoutes);
+app.use("/api/vacation-requests", vacationRequestRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 
 // Health check route
 app.get("/api/health", (req, res) => {
