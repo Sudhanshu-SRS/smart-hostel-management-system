@@ -14,6 +14,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { SocketProvider } from "./context/SocketContext";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
 import Layout from "./components/Layout/Layout";
+import ChatbotWidget from "./components/Chatbot/ChatbotWidget";
 
 // Auth Pages
 import Login from "./pages/Auth/Login";
@@ -291,6 +292,7 @@ function App() {
                 boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
               }}
             />
+            <ChatbotWidget />
           </Router>
         </SocketProvider>
       </AuthProvider>
