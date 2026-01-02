@@ -170,4 +170,19 @@ export const entryExitAPI = {
   getStats: () => api.get("/gates/stats"),
 };
 
+// Vacation Request API
+export const vacationRequestAPI = {
+  createRequest: (reason) => api.post("/vacation-requests", { reason }),
+  getMyRequest: () => api.get("/vacation-requests/my-request"),
+  getPendingRequests: (params = {}) =>
+    api.get("/vacation-requests/pending", { params }),
+  getAllRequests: (params = {}) => api.get("/vacation-requests", { params }),
+  approveByAdmin: (requestId, comments) =>
+    api.post(`/vacation-requests/${requestId}/approve-admin`, { comments }),
+  approveByWarden: (requestId, comments) =>
+    api.post(`/vacation-requests/${requestId}/approve-warden`, { comments }),
+  rejectRequest: (requestId, reason) =>
+    api.post(`/vacation-requests/${requestId}/reject`, { reason }),
+};
+
 export default api;

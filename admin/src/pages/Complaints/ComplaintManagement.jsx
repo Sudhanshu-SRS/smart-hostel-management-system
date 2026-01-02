@@ -201,8 +201,9 @@ const ComplaintManagement = () => {
     try {
       const response = await api.get("/users");
       if (response.data.success) {
+        // Include admin, warden, and staff (maintenance personnel)
         const staff = response.data.users.filter((user) =>
-          ["admin", "warden"].includes(user.role)
+          ["admin", "warden", "staff"].includes(user.role)
         );
         setUsers(staff);
       }
@@ -251,17 +252,25 @@ const ComplaintManagement = () => {
   };
 
   const handleComplaintUpdate = (updatedComplaint) => {
+    // Handle both direct complaint objects and data objects with complaint property
+    const complaint = updatedComplaint?.complaint || updatedComplaint;
+
+    if (!complaint || !complaint._id) {
+      console.warn("Invalid complaint update received:", updatedComplaint);
+      return;
+    }
+
     setComplaints((prev) =>
-      prev.map((complaint) =>
-        complaint._id === updatedComplaint._id ? updatedComplaint : complaint
-      )
+      prev.map((c) => (c._id === complaint._id ? complaint : c))
     );
     fetchStats();
   };
 
   const handleCommentAdded = (data) => {
-    handleComplaintUpdate(data.complaint);
-    showSnackbar("New comment added", "info");
+    if (data && data.complaint) {
+      handleComplaintUpdate(data.complaint);
+      showSnackbar("New comment added", "info");
+    }
   };
 
   const handleBulkUpdate = () => {
@@ -272,6 +281,15 @@ const ComplaintManagement = () => {
 
   const handleAssignComplaint = async () => {
     try {
+      // Validate that a user is selected
+      if (!assignedTo || assignedTo.trim() === "") {
+        showSnackbar(
+          "Please select a staff member to assign the complaint",
+          "warning"
+        );
+        return;
+      }
+
       const response = await api.post(
         `/complaints/${selectedComplaint._id}/assign`,
         {
@@ -291,6 +309,12 @@ const ComplaintManagement = () => {
 
   const handleAddComment = async () => {
     try {
+      // Validate that a comment is provided
+      if (!comment || comment.trim() === "") {
+        showSnackbar("Please enter a comment", "warning");
+        return;
+      }
+
       const response = await api.post(
         `/complaints/${selectedComplaint._id}/comments`,
         {
@@ -1003,7 +1027,7 @@ const ComplaintManagement = () => {
         open={openAssignDialog}
         onClose={() => setOpenAssignDialog(false)}
       >
-        <DialogTitle>Assign Complaint</DialogTitle>
+        <DialogTitle>Assign Complaint to Staff</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Assign To</InputLabel>
@@ -1014,7 +1038,21 @@ const ComplaintManagement = () => {
             >
               {users.map((user) => (
                 <MenuItem key={user._id} value={user._id}>
-                  {user.name} ({user.role})
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Avatar sx={{ width: 32, height: 32, fontSize: "0.8rem" }}>
+                      {user.name?.charAt(0)}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {user.name}
+                      </Typography>
+                      <Typography variant="caption">
+                        {user.specialization && user.role === "staff"
+                          ? `${user.specialization} - ${user.phoneNumber}`
+                          : `${user.role} - ${user.phoneNumber}`}
+                      </Typography>
+                    </Box>
+                  </Box>
                 </MenuItem>
               ))}
             </Select>

@@ -18,6 +18,11 @@ import {
   Tooltip,
   Divider,
   Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import {
   Hotel,
@@ -26,7 +31,7 @@ import {
   Home as HomeIcon,
   People as PeopleIcon,
 } from "@mui/icons-material";
-import { roomsAPI } from "../../services/api";
+import { roomsAPI, vacationRequestAPI } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 
 const Rooms = () => {
@@ -41,6 +46,12 @@ const Rooms = () => {
     open: false,
     message: "",
     severity: "info",
+  });
+  const [vacationRequestDialog, setVacationRequestDialog] = useState({
+    open: false,
+    reason: "",
+    loading: false,
+    selectedRoom: null,
   });
   const { user } = useAuth();
 
@@ -136,6 +147,93 @@ const Rooms = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  const handleVacateRoom = async () => {
+    // For students, open dialog to submit reason
+    if (user?.role === "student") {
+      // Find the current room object
+      const currentRoom = rooms.find(
+        (room) =>
+          room._id ===
+          (typeof user.room === "string" ? user.room : user.room?._id)
+      );
+      setVacationRequestDialog({
+        ...vacationRequestDialog,
+        open: true,
+        selectedRoom: currentRoom || user.room,
+        reason: "",
+      });
+    } else {
+      // For admin/warden, directly vacate without needing approval
+      try {
+        if (!user?.room) {
+          showSnackbar("No room to vacate", "error");
+          return;
+        }
+
+        const roomId =
+          typeof user.room === "string" ? user.room : user.room._id;
+        const response = await roomsAPI.vacateRoom(roomId);
+        if (response.data.success) {
+          showSnackbar("Room vacated successfully!", "success");
+          fetchRooms();
+        } else {
+          showSnackbar(
+            response.data.message || "Failed to vacate room",
+            "error"
+          );
+        }
+      } catch (error) {
+        console.error("Vacate room error:", error);
+        showSnackbar(
+          error.response?.data?.message || "Error vacating room",
+          "error"
+        );
+      }
+    }
+  };
+
+  const handleSubmitVacationRequest = async () => {
+    try {
+      // Validate room is selected
+      if (!vacationRequestDialog.selectedRoom) {
+        showSnackbar("Please select a room to vacate", "error");
+        return;
+      }
+
+      if (!vacationRequestDialog.reason.trim()) {
+        showSnackbar("Please provide a reason for room vacation", "error");
+        return;
+      }
+
+      setVacationRequestDialog({ ...vacationRequestDialog, loading: true });
+
+      const response = await vacationRequestAPI.createRequest(
+        vacationRequestDialog.reason
+      );
+
+      if (response.data.success) {
+        showSnackbar(
+          "Vacation request submitted! Awaiting admin and warden approval.",
+          "success"
+        );
+        setVacationRequestDialog({ open: false, reason: "", loading: false });
+      } else {
+        showSnackbar(
+          response.data.message || "Failed to submit vacation request",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error("Submit vacation request error:", error);
+      showSnackbar(
+        error.response?.data?.message || "Error submitting vacation request",
+        "error"
+      );
+    } finally {
+      setVacationRequestDialog({ ...vacationRequestDialog, loading: false });
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -176,6 +274,87 @@ const Rooms = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
+      )}
+
+      {/* Show current room status for students */}
+      {user?.role === "student" && user?.room && (
+        <Card
+          sx={{
+            mb: 4,
+            background: "linear-gradient(135deg, #fff3e0, #ffe0b2)",
+            borderLeft: "5px solid #ff9800",
+          }}
+        >
+          <CardContent>
+            <Box
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              flexWrap="wrap"
+              gap={2}
+            >
+              <Box>
+                <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+                  ✓ Your Current Room
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      Room Number
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {typeof user.room === "object"
+                        ? user.room.roomNumber
+                        : "Room Assigned"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      Building
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {typeof user.room === "object" ? user.room.building : "-"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      Floor
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {typeof user.room === "object" ? user.room.floor : "-"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      Status
+                    </Typography>
+                    <Chip
+                      label="Occupied"
+                      color="success"
+                      size="small"
+                      sx={{ fontWeight: "bold" }}
+                    />
+                  </Grid>
+                </Grid>
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 2, color: "text.secondary" }}
+                >
+                  To request room vacation, click the button below. Admin and
+                  warden approval is required.
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                color="warning"
+                onClick={handleVacateRoom}
+                sx={{ minWidth: 180, height: 56 }}
+              >
+                Request Room Vacation
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Statistics Cards */}
@@ -406,6 +585,7 @@ const Rooms = () => {
                       <Button
                         variant="contained"
                         fullWidth
+                        disabled={user?.room ? true : false}
                         sx={{ mt: 1 }}
                         onClick={async () => {
                           try {
@@ -432,8 +612,13 @@ const Rooms = () => {
                             );
                           }
                         }}
+                        title={
+                          user?.room
+                            ? "Please vacate your current room first"
+                            : "Book this room"
+                        }
                       >
-                        Book Room
+                        {user?.room ? "Already have a room" : "Book Room"}
                       </Button>
                     )}
 
@@ -483,6 +668,122 @@ const Rooms = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Vacation Request Dialog */}
+      <Dialog
+        open={vacationRequestDialog.open}
+        onClose={() =>
+          setVacationRequestDialog({
+            open: false,
+            reason: "",
+            loading: false,
+            selectedRoom: null,
+          })
+        }
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Request Room Vacation</DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            To vacate your room, you need to submit a vacation request. The
+            admin and warden will review and approve it.
+          </Typography>
+
+          {/* Room Selection */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+              Room to Vacate
+            </Typography>
+            {vacationRequestDialog.selectedRoom ? (
+              <Card
+                sx={{ p: 2, bgcolor: "primary.light", color: "primary.dark" }}
+              >
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Room Number
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {vacationRequestDialog.selectedRoom.roomNumber}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Building
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {vacationRequestDialog.selectedRoom.building}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Floor
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {vacationRequestDialog.selectedRoom.floor}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Capacity
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {vacationRequestDialog.selectedRoom.capacity} Beds
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Card>
+            ) : (
+              <Alert severity="warning">No room selected</Alert>
+            )}
+          </Box>
+
+          {/* Reason TextField */}
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            placeholder="Please provide a reason for your room vacation request..."
+            value={vacationRequestDialog.reason}
+            onChange={(e) =>
+              setVacationRequestDialog({
+                ...vacationRequestDialog,
+                reason: e.target.value,
+              })
+            }
+            disabled={vacationRequestDialog.loading}
+            variant="outlined"
+            label="Reason for Vacation"
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setVacationRequestDialog({
+                open: false,
+                reason: "",
+                loading: false,
+                selectedRoom: null,
+              })
+            }
+            disabled={vacationRequestDialog.loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmitVacationRequest}
+            variant="contained"
+            disabled={
+              vacationRequestDialog.loading ||
+              !vacationRequestDialog.selectedRoom
+            }
+          >
+            {vacationRequestDialog.loading ? "Submitting..." : "Submit Request"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -100,6 +100,12 @@ const roomSchema = new mongoose.Schema(
         description: String,
       },
     ],
+    vacationRequests: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "VacationRequest",
+      },
+    ],
   },
   {
     timestamps: true,

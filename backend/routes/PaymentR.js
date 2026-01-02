@@ -7,93 +7,27 @@ const Room = require("../models/room");
 const { auth, authorize } = require("../middleware/authmiddleware");
 const paymentNotificationService = require("../services/paymentNotificationService");
 const paymentScheduler = require("../services/paymentScheduler");
+const emailService = require("../services/emailService");
 
 const router = express.Router();
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
-// @route   GET /api/payments
-// @desc    Get all payments (with filters)
-// @access  Private
-router.get("/", auth, async (req, res) => {
-  try {
-    const { status, paymentType, user: userId } = req.query;
-    const filter = {};
-
-    // Students can only see their own payments
-    if (req.user.role === "student") {
-      filter.user = req.user._id;
-    } else if (userId) {
-      filter.user = userId;
-    }
-
-    if (status) filter.status = status;
-    if (paymentType) filter.paymentType = paymentType;
-
-    const payments = await Payment.find(filter)
-      .populate("user", "name email studentId phoneNumber")
-      .populate("room", "roomNumber building floor")
-      .sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      count: payments.length,
-      payments,
-    });
-  } catch (error) {
-    console.error("Get payments error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
+// Initialize Razorpay with validation
+let razorpay;
+try {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    console.warn("⚠️ Razorpay credentials not configured - using demo mode");
   }
-});
+  razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID || "test_key",
+    key_secret: process.env.RAZORPAY_KEY_SECRET || "test_secret",
+  });
+} catch (error) {
+  console.error("❌ Failed to initialize Razorpay:", error.message);
+}
 
-// @route   GET /api/payments/:id
-// @desc    Get single payment
-// @access  Private
-router.get("/:id", auth, async (req, res) => {
-  try {
-    const payment = await Payment.findById(req.params.id)
-      .populate("user", "name email studentId phoneNumber")
-      .populate("room", "roomNumber building floor");
-
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: "Payment not found",
-      });
-    }
-
-    // Students can only view their own payments
-    if (
-      req.user.role === "student" &&
-      payment.user._id.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied",
-      });
-    }
-
-    res.json({
-      success: true,
-      payment,
-    });
-  } catch (error) {
-    console.error("Get payment error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-});
+// ======= SPECIFIC ROUTES MUST COME FIRST (before generic / and /:id routes) =======
+// Order: Specific named routes first (/create-order, /verify, /webhook, /user/:userId, /stats/*, /overdue, /analytics, /manual, etc.)
+// Then: Generic routes (POST /, PUT /:id, GET /:id, GET /)
 
 // @route   POST /api/payments/create-order
 // @desc    Create Razorpay order
@@ -118,6 +52,9 @@ router.post("/create-order", auth, async (req, res) => {
       description: description || `${paymentType.replace("_", " ")} payment`,
       status: "pending",
       dueDate: new Date(),
+      lateFee: 0,
+      discount: 0,
+      finalAmount: parseFloat(amount), // Set finalAmount equal to amount initially
     };
 
     if (roomId) {
@@ -138,6 +75,12 @@ router.post("/create-order", auth, async (req, res) => {
         paymentType: paymentType,
       },
     };
+
+    console.log("🔑 Razorpay Credentials Check:", {
+      keyIdPresent: !!process.env.RAZORPAY_KEY_ID,
+      keySecretPresent: !!process.env.RAZORPAY_KEY_SECRET,
+      keyIdStartsWith: process.env.RAZORPAY_KEY_ID?.substring(0, 10),
+    });
 
     const razorpayOrder = await razorpay.orders.create(options);
 
@@ -222,11 +165,32 @@ router.post("/verify", auth, async (req, res) => {
 
     await payment.save();
 
+    // Populate user data for email
+    await payment.populate("user", "name email studentId phoneNumber");
+
     // Send payment confirmation email
     await paymentNotificationService.sendPaymentConfirmation(payment._id);
 
-    // Populate user and room data for response
-    await payment.populate("user", "name email studentId phoneNumber");
+    // Send payment acknowledgment email
+    await emailService
+      .sendPaymentAcknowledgmentEmail(payment.user, payment)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `📧 Payment acknowledgment email sent to ${payment.user.email}`
+          );
+        } else {
+          console.error(
+            `❌ Failed to send payment acknowledgment email:`,
+            result.error
+          );
+        }
+      })
+      .catch((error) => {
+        console.error(`❌ Error sending payment acknowledgment email:`, error);
+      });
+
+    // Populate room data for response
     await payment.populate("room", "roomNumber building floor");
 
     res.json({
@@ -376,6 +340,7 @@ router.post("/", auth, authorize("admin", "warden"), async (req, res) => {
       dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       status: paymentMethod === "cash" ? "completed" : "pending",
       paidDate: paymentMethod === "cash" ? new Date() : undefined,
+      finalAmount: parseFloat(amount),
     });
 
     await payment.save();
@@ -630,6 +595,7 @@ router.post("/manual", auth, authorize("admin", "warden"), async (req, res) => {
       status: "completed",
       dueDate: new Date(),
       paidDate: new Date(),
+      finalAmount: parseFloat(amount),
     };
 
     if (roomId) {
@@ -747,6 +713,7 @@ router.post(
 // @access  Admin/Warden
 router.get("/overdue", auth, authorize("admin", "warden"), async (req, res) => {
   try {
+    console.log("📊 Fetching overdue payments...");
     const overduePayments = await Payment.find({
       status: "pending",
       dueDate: { $lt: new Date() },
@@ -755,13 +722,15 @@ router.get("/overdue", auth, authorize("admin", "warden"), async (req, res) => {
       .populate("room", "roomNumber building floor")
       .sort({ dueDate: 1 });
 
+    console.log("✅ Found overdue payments:", overduePayments.length);
     res.json({
       success: true,
       count: overduePayments.length,
       payments: overduePayments,
     });
   } catch (error) {
-    console.error("Get overdue payments error:", error);
+    console.error("❌ Get overdue payments error:", error);
+    console.error("❌ Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Failed to fetch overdue payments",
@@ -779,6 +748,7 @@ router.get(
   authorize("admin", "warden"),
   async (req, res) => {
     try {
+      console.log("📊 Fetching payment analytics...");
       const { startDate, endDate } = req.query;
       const filter = {};
 
@@ -788,6 +758,8 @@ router.get(
           $lte: new Date(endDate),
         };
       }
+
+      console.log("📋 Using filter:", filter);
 
       // Get analytics data
       const [
@@ -845,12 +817,14 @@ router.get(
         totalPayments: pendingPayments + completedPayments,
       };
 
+      console.log("✅ Analytics data ready");
       res.json({
         success: true,
         analytics,
       });
     } catch (error) {
-      console.error("Get payment analytics error:", error);
+      console.error("❌ Get payment analytics error:", error);
+      console.error("❌ Error stack:", error.stack);
       res.status(500).json({
         success: false,
         message: "Failed to fetch payment analytics",
@@ -906,5 +880,86 @@ router.post(
     }
   }
 );
+
+// ======= GENERIC ROUTES (at the end, after all specific routes) =======
+
+// @route   GET /api/payments
+// @desc    Get all payments (with filters)
+// @access  Private
+router.get("/", auth, async (req, res) => {
+  try {
+    const { status, paymentType, user: userId } = req.query;
+    const filter = {};
+
+    // Students can only see their own payments
+    if (req.user.role === "student") {
+      filter.user = req.user._id;
+    } else if (userId) {
+      filter.user = userId;
+    }
+
+    if (status) filter.status = status;
+    if (paymentType) filter.paymentType = paymentType;
+
+    const payments = await Payment.find(filter)
+      .populate("user", "name email studentId phoneNumber")
+      .populate("room", "roomNumber building floor")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: payments.length,
+      payments,
+    });
+  } catch (error) {
+    console.error("Get payments error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+// @route   GET /api/payments/:id
+// @desc    Get single payment
+// @access  Private
+router.get("/:id", auth, async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id)
+      .populate("user", "name email studentId phoneNumber")
+      .populate("room", "roomNumber building floor");
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    // Students can only view their own payments
+    if (
+      req.user.role === "student" &&
+      payment.user._id.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    res.json({
+      success: true,
+      payment,
+    });
+  } catch (error) {
+    console.error("Get payment error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
 
 module.exports = router;

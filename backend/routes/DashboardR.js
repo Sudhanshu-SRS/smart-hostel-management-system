@@ -51,7 +51,7 @@ router.get("/stats", auth, async (req, res) => {
         },
         room: req.user.room
           ? await Room.findById(req.user.room).populate(
-              "occupants",
+              "beds.occupant",
               "name email"
             )
           : null,

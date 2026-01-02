@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["student", "warden", "admin"],
+      enum: ["student", "warden", "admin", "staff"],
       default: "student",
     },
     phoneNumber: {
@@ -39,6 +39,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       sparse: true,
       unique: true,
+    },
+    specialization: {
+      type: String,
+      enum: [
+        "electrical",
+        "plumbing",
+        "maintenance",
+        "cleaning",
+        "security",
+        "wifi",
+        "other",
+      ],
+      sparse: true,
     },
     room: {
       type: mongoose.Schema.Types.ObjectId,

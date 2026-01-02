@@ -127,7 +127,7 @@ export const AuthProvider = ({ children }) => {
           duration: 5000,
         }
       );
-      return { success: true };
+      return { success: true, studentId: res.data.user.studentId };
     } catch (error) {
       const message = error.response?.data?.message || "Registration failed";
       dispatch({

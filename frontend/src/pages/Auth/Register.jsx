@@ -18,6 +18,10 @@ import {
   StepLabel,
   Card,
   CardContent,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import {
   Visibility,
@@ -38,13 +42,14 @@ const steps = ["Personal Information", "Contact Details", "Emergency Contact"];
 
 const Register = () => {
   const [activeStep, setActiveStep] = useState(0);
+  const [generatedStudentId, setGeneratedStudentId] = useState(""); // For displaying auto-generated ID
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // For showing studentId modal
   const [formData, setFormData] = useState({
     // Personal Information
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
-    studentId: "",
     role: "student",
 
     // Contact Details
@@ -117,8 +122,6 @@ const Register = () => {
         if (formData.password !== formData.confirmPassword) {
           newErrors.confirmPassword = "Passwords do not match";
         }
-        if (!formData.studentId.trim())
-          newErrors.studentId = "Student ID is required";
         break;
 
       case 1: // Contact Details
@@ -177,7 +180,12 @@ const Register = () => {
     const result = await register(submitData);
 
     if (result.success) {
-      navigate("/dashboard");
+      setGeneratedStudentId(result.studentId);
+      setShowSuccessModal(true);
+      // Auto-redirect after 3 seconds
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 3000);
     }
 
     setLoading(false);
@@ -229,14 +237,12 @@ const Register = () => {
             </Grid>
             <Grid item xs={12}>
               <TextField
-                required
                 fullWidth
                 name="studentId"
-                label="Student ID"
-                value={formData.studentId}
-                onChange={handleChange}
-                error={!!errors.studentId}
-                helperText={errors.studentId}
+                label="Student ID (Auto-Generated)"
+                value={generatedStudentId}
+                disabled
+                helperText="Your Student ID will be auto-generated upon registration"
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -571,6 +577,87 @@ const Register = () => {
           </Paper>
         </motion.div>
       </Container>
+
+      {/* Success Modal - Display Auto-Generated Student ID */}
+      <Dialog
+        open={showSuccessModal}
+        onClose={() => {
+          setShowSuccessModal(false);
+          navigate("/dashboard");
+        }}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            background: "linear-gradient(135deg, #1976d2, #42a5f5)",
+            color: "white",
+            fontWeight: 600,
+            fontSize: "1.3rem",
+          }}
+        >
+          🎉 Registration Successful!
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3, textAlign: "center" }}>
+          <Typography variant="body1" sx={{ mb: 2, color: "#555" }}>
+            Your account has been created successfully.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 3, color: "#999" }}>
+            Your Student ID is:
+          </Typography>
+          <Card
+            sx={{
+              background: "linear-gradient(135deg, #f5f5f5, #e8e8e8)",
+              border: "2px solid #1976d2",
+              mb: 2,
+            }}
+          >
+            <CardContent>
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 700,
+                  color: "#1976d2",
+                  fontFamily: "monospace",
+                  letterSpacing: 2,
+                }}
+              >
+                {generatedStudentId}
+              </Typography>
+            </CardContent>
+          </Card>
+          <Typography variant="body2" sx={{ color: "#999", mb: 2 }}>
+            Please save this ID. You'll need it for all official communications.
+          </Typography>
+          <Typography variant="caption" sx={{ color: "#bbb" }}>
+            Redirecting to dashboard in 3 seconds...
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => {
+              setShowSuccessModal(false);
+              navigate("/dashboard");
+            }}
+            variant="contained"
+            sx={{
+              background: "linear-gradient(135deg, #1976d2, #42a5f5)",
+              "&:hover": {
+                background: "linear-gradient(135deg, #1565c0, #1976d2)",
+              },
+            }}
+            fullWidth
+          >
+            Go to Dashboard
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -15,6 +15,36 @@ const generateToken = (id) => {
   });
 };
 
+// Helper function to generate next student ID (SHMS001, SHMS002, etc.)
+const generateStudentId = async () => {
+  try {
+    // Get the last student created with SHMS prefix
+    const lastStudent = await User.findOne(
+      { studentId: { $regex: "^SHMS" } },
+      { studentId: 1 },
+      { sort: { createdAt: -1 } }
+    );
+
+    if (!lastStudent || !lastStudent.studentId) {
+      // First student
+      return "SHMS001";
+    }
+
+    // Extract number from studentId (e.g., "SHMS001" -> 1)
+    const match = lastStudent.studentId.match(/SHMS(\d+)/);
+    if (match) {
+      const lastNumber = parseInt(match[1], 10);
+      const nextNumber = lastNumber + 1;
+      return `SHMS${String(nextNumber).padStart(3, "0")}`;
+    }
+
+    return "SHMS001";
+  } catch (error) {
+    console.error("Error generating student ID:", error);
+    return "SHMS001";
+  }
+};
+
 // @route   POST /api/auth/register
 // @desc    Register a new user
 // @access  Public
@@ -26,24 +56,27 @@ router.post("/register", validateRegister, async (req, res) => {
       password,
       phoneNumber,
       role,
-      studentId,
       emergencyContact,
       address,
     } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [
-        { email },
-        { studentId: studentId && studentId !== "" ? studentId : null },
-      ],
+      email,
     });
 
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "User with this email or student ID already exists",
+        message: "User with this email already exists",
       });
+    }
+
+    // Generate student ID automatically for students
+    let studentId = null;
+    if (role === "student") {
+      studentId = await generateStudentId();
+      console.log(`📝 Generated student ID: ${studentId}`);
     }
 
     // Create user

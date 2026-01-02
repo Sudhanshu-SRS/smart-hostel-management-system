@@ -93,11 +93,27 @@ router.get("/:id", auth, async (req, res) => {
     let room;
 
     if (req.user.role === "admin" || req.user.role === "warden") {
-      // Admin and warden can see all details including occupant information
-      room = await Room.findById(req.params.id).populate({
-        path: "beds.occupant",
-        select: "name email phoneNumber studentId profilePicture course year",
-      });
+      // Admin and warden can see all details including occupant information and vacation requests
+      room = await Room.findById(req.params.id)
+        .populate({
+          path: "beds.occupant",
+          select: "name email phoneNumber studentId profilePicture course year",
+        })
+        .populate({
+          path: "vacationRequests",
+          select: "student room reason status requestDate finalApprovalDate",
+          populate: [
+            { path: "student", select: "name email studentId" },
+            {
+              path: "adminApproval.admin",
+              select: "name email",
+            },
+            {
+              path: "wardenApproval.warden",
+              select: "name email",
+            },
+          ],
+        });
     } else {
       // Students can only see basic room info and bed availability
       room = await Room.findById(req.params.id).select(
@@ -205,7 +221,7 @@ router.put("/:id", auth, authorize("admin", "warden"), async (req, res) => {
     const room = await Room.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
-    }).populate("occupants", "name email phoneNumber studentId");
+    }).populate("beds.occupant", "name email phoneNumber studentId");
 
     if (!room) {
       return res.status(404).json({
@@ -282,8 +298,10 @@ router.delete("/:id", auth, authorize("admin"), async (req, res) => {
 // @access  Student
 router.post("/:id/book", auth, authorize("student"), async (req, res) => {
   try {
-    console.log(`📚 Student ${req.user._id} attempting to book room ${req.params.id}`);
-    
+    console.log(
+      `📚 Student ${req.user._id} attempting to book room ${req.params.id}`
+    );
+
     const room = await Room.findById(req.params.id);
     if (!room) {
       return res.status(404).json({
@@ -312,7 +330,7 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
     // Get the user to check if they already have a room
     const user = await User.findById(req.user._id);
     console.log(`👤 User room status:`, user.room);
-    
+
     // Check if user already has a room
     if (user && user.room && user.room !== null) {
       console.log(`⚠️  User already has room: ${user.room}`);
@@ -343,8 +361,10 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
       (bed) => bed.bedNumber === bedToAllocate.bedNumber
     );
 
-    console.log(`🛏️ Allocating bed ${bedToAllocate.bedNumber} to student ${req.user._id}`);
-    
+    console.log(
+      `🛏️ Allocating bed ${bedToAllocate.bedNumber} to student ${req.user._id}`
+    );
+
     room.beds[bedIndex].isOccupied = true;
     room.beds[bedIndex].occupant = req.user._id;
     room.beds[bedIndex].allocationDate = new Date();
@@ -360,7 +380,26 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
       select: "name email phoneNumber studentId",
     });
 
-    console.log(`✅ Room ${room._id} booked successfully for student ${req.user._id}`);
+    console.log(
+      `✅ Room ${room._id} booked successfully for student ${req.user._id}`
+    );
+
+    // Send room booking confirmation email
+    const emailService = require("../services/emailService");
+    await emailService
+      .sendRoomBookingAcknowledgmentEmail(req.user, room)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `📧 Room booking confirmation email sent to ${req.user.email}`
+          );
+        } else {
+          console.error(`❌ Failed to send room booking email:`, result.error);
+        }
+      })
+      .catch((error) => {
+        console.error(`❌ Error sending room booking email:`, error);
+      });
 
     // Emit real-time update
     const io = req.app.get("io");
@@ -383,7 +422,7 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
   } catch (error) {
     console.error("❌ Book room error:", error.message);
     console.error("📋 Error stack:", error.stack);
-    
+
     // Send detailed error response in development
     if (process.env.NODE_ENV === "development") {
       res.status(500).json({
@@ -404,6 +443,7 @@ router.post("/:id/book", auth, authorize("student"), async (req, res) => {
 // @route   POST /api/rooms/:id/vacate
 // @desc    Vacate a room
 // @access  Student/Admin/Warden
+// NOTE: Students require an approved vacation request. Admin/Warden can vacate without request.
 router.post("/:id/vacate", auth, async (req, res) => {
   try {
     const { userId } = req.body;
@@ -419,6 +459,23 @@ router.post("/:id/vacate", auth, async (req, res) => {
         success: false,
         message: "You can only vacate your own room",
       });
+    }
+
+    // If student is vacating, check for approved vacation request
+    if (req.user.role === "student") {
+      const VacationRequest = require("../models/vacationRequest");
+      const approvedRequest = await VacationRequest.findOne({
+        student: req.user._id,
+        status: "approved",
+      });
+
+      if (!approvedRequest) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "You must have an approved vacation request to vacate your room",
+        });
+      }
     }
 
     const room = await Room.findById(req.params.id);

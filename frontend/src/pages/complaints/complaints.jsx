@@ -182,7 +182,7 @@ const Complaints = () => {
     );
 
     // Show notification if it's the user's complaint
-    if (updatedComplaint.user._id === user._id) {
+    if (updatedComplaint.user && updatedComplaint.user._id === user._id) {
       showSnackbar(
         `Your complaint has been ${updatedComplaint.status.replace("_", " ")}`,
         "info"
@@ -726,14 +726,14 @@ const Complaints = () => {
                                     <Avatar
                                       sx={{
                                         bgcolor:
-                                          comment.user.role === "student"
+                                          comment.user?.role === "student"
                                             ? "primary.main"
                                             : "secondary.main",
                                         width: 40,
                                         height: 40,
                                       }}
                                     >
-                                      {comment.user.name?.charAt(0)}
+                                      {comment.user?.name?.charAt(0)}
                                     </Avatar>
                                   </ListItemIcon>
                                   <ListItemText
@@ -747,8 +747,8 @@ const Complaints = () => {
                                           variant="body1"
                                           fontWeight="medium"
                                         >
-                                          {comment.user.name} (
-                                          {comment.user.role})
+                                          {comment.user?.name} (
+                                          {comment.user?.role})
                                         </Typography>
                                         <Typography
                                           variant="caption"
@@ -996,7 +996,7 @@ const Complaints = () => {
                           alignItems="center"
                         >
                           <Typography variant="body2" fontWeight={500}>
-                            {comment.user.name} ({comment.user.role})
+                            {comment.user?.name} ({comment.user?.role})
                           </Typography>
                           <Typography variant="caption" color="textSecondary">
                             {formatDate(comment.timestamp)}
