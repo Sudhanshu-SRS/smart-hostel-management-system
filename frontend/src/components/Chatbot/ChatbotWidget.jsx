@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect, useContext } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
-import { AuthContext } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 import "./ChatbotWidget.css";
 
 const ChatbotWidget = () => {
-  const { authToken } = useContext(AuthContext);
+  const { token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -53,7 +53,7 @@ const ChatbotWidget = () => {
         },
         {
           headers: {
-            Authorization: `Bearer ${authToken}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         }
@@ -92,7 +92,7 @@ const ChatbotWidget = () => {
           `${import.meta.env.VITE_API_URL}/api/chatbot/history`,
           {
             headers: {
-              Authorization: `Bearer ${authToken}`,
+              Authorization: `Bearer ${token}`,
             },
           }
         );
