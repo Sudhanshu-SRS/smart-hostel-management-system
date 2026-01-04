@@ -78,12 +78,15 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // In development, allow all localhost origins
-    if (
-      process.env.NODE_ENV === "development" &&
-      origin.includes("localhost")
-    ) {
-      return callback(null, true);
+    // In development, allow all 192.168.x.x and localhost origins
+    if (process.env.NODE_ENV === "development") {
+      if (
+        origin.includes("localhost") ||
+        origin.includes("192.168") ||
+        origin.includes("127.0.0.1")
+      ) {
+        return callback(null, true);
+      }
     }
 
     if (allowedOrigins.indexOf(origin) !== -1) {

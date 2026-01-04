@@ -46,8 +46,9 @@ const ChatbotWidget = () => {
     setIsLoading(true);
 
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/chatbot/message`,
+        `${apiUrl}/api/chatbot/message`,
         {
           message: inputValue,
         },
@@ -88,14 +89,12 @@ const ChatbotWidget = () => {
   const clearHistory = async () => {
     if (window.confirm("Are you sure you want to clear the chat history?")) {
       try {
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/api/chatbot/history`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+        await axios.delete(`${apiUrl}/api/chatbot/history`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         setMessages([
           {
