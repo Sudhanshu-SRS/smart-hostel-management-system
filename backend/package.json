@@ -13,6 +13,7 @@
     "seed:all": "npm run seed:staff && npm run seed:data && npm run seed:additional"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.40.0",
     "compression": "^1.7.4",

@@ -1,53 +1,50 @@
 const express = require("express");
 const router = express.Router();
-const { body, validationResult } = require("express-validator");
-const authMiddleware = require("../middleware/authmiddleware");
+const { auth } = require("../middleware/authmiddleware");
 const geminiService = require("../services/geminiService");
 
 /**
  * POST /api/chatbot/message
  * Send a message to the chatbot and get a response
  */
-router.post(
-  "/message",
-  authMiddleware,
-  [body("message").trim().notEmpty().withMessage("Message cannot be empty")],
-  async (req, res) => {
-    try {
-      // Validate request
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+router.post("/message", auth, async (req, res) => {
+  try {
+    const { message } = req.body;
 
-      const { message } = req.body;
-      const userId = req.user.id;
-
-      // Get response from Gemini
-      const response = await geminiService.chat(userId, message);
-
-      res.status(200).json({
-        success: true,
-        message: message,
-        response: response,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      console.error("Chatbot Error:", error);
-      res.status(500).json({
+    // Validate message
+    if (!message || message.trim() === "") {
+      return res.status(400).json({
         success: false,
-        message: "Error communicating with chatbot",
-        error: error.message,
+        message: "Message cannot be empty",
       });
     }
+
+    const userId = req.user.id;
+
+    // Get response from Gemini
+    const response = await geminiService.chat(userId, message);
+
+    res.status(200).json({
+      success: true,
+      message: message,
+      response: response,
+      timestamp: new Date(),
+    });
+  } catch (error) {
+    console.error("Chatbot Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error communicating with chatbot",
+      error: error.message,
+    });
   }
-);
+});
 
 /**
  * GET /api/chatbot/history
  * Get conversation history for the user
  */
-router.get("/history", authMiddleware, async (req, res) => {
+router.get("/history", auth, async (req, res) => {
   try {
     const userId = req.user.id;
     const history = geminiService.getHistory(userId);
@@ -70,7 +67,7 @@ router.get("/history", authMiddleware, async (req, res) => {
  * DELETE /api/chatbot/history
  * Clear conversation history for the user
  */
-router.delete("/history", authMiddleware, async (req, res) => {
+router.delete("/history", auth, async (req, res) => {
   try {
     const userId = req.user.id;
     geminiService.clearHistory(userId);
