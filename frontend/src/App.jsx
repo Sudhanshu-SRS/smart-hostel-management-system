@@ -24,7 +24,7 @@ import Register from "./pages/Auth/Register";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Rooms from "./pages/Rooms/Rooms";
 import Payments from "./pages/payments/Payments";
-import Complaints from "./pages/Complaints/Complaints";
+import Complaints from "./pages/complaints/complaints";
 import Visitors from "./pages/Visitors/Visitors";
 import Users from "./pages/Users/Users";
 import Profile from "./pages/Profile/Profile";
