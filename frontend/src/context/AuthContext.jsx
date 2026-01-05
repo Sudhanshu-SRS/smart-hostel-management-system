@@ -2,6 +2,9 @@ import React, { createContext, useContext, useReducer, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 
+// Base URL from environment
+const API_URL = import.meta.env.VITE_API_URL;
+
 const AuthContext = createContext();
 
 const initialState = {
@@ -15,11 +18,7 @@ const initialState = {
 const authReducer = (state, action) => {
   switch (action.type) {
     case "USER_LOADING":
-      return {
-        ...state,
-        loading: true,
-        error: null,
-      };
+      return { ...state, loading: true, error: null };
     case "USER_LOADED":
       return {
         ...state,
@@ -52,15 +51,9 @@ const authReducer = (state, action) => {
         error: action.payload,
       };
     case "CLEAR_ERRORS":
-      return {
-        ...state,
-        error: null,
-      };
+      return { ...state, error: null };
     case "UPDATE_USER":
-      return {
-        ...state,
-        user: { ...state.user, ...action.payload },
-      };
+      return { ...state, user: { ...state.user, ...action.payload } };
     default:
       return state;
   }
@@ -69,8 +62,9 @@ const authReducer = (state, action) => {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Configure axios defaults
+  // Set axios base URL and Authorization header
   useEffect(() => {
+    axios.defaults.baseURL = API_URL;
     if (state.token) {
       axios.defaults.headers.common["Authorization"] = `Bearer ${state.token}`;
     } else {
@@ -80,93 +74,66 @@ export const AuthProvider = ({ children }) => {
 
   // Load user on app start
   const loadUser = async () => {
-    if (state.token) {
-      dispatch({ type: "USER_LOADING" });
-      try {
-        const res = await axios.get("/api/auth/me");
-
-        // Ensure user object has both id and _id for compatibility
-        const userData = {
-          ...res.data.user,
-          id: res.data.user._id || res.data.user.id, // Ensure id exists
-          _id: res.data.user._id || res.data.user.id, // Ensure _id exists
-        };
-
-        dispatch({
-          type: "USER_LOADED",
-          payload: userData,
-        });
-      } catch (error) {
-        console.error("Load user error:", error);
-        dispatch({
-          type: "AUTH_ERROR",
-          payload: error.response?.data?.message || "Failed to load user",
-        });
-      }
-    } else {
-      // If no token, set loading to false
-      dispatch({
-        type: "AUTH_ERROR",
-        payload: null,
-      });
+    if (!state.token) {
+      dispatch({ type: "AUTH_ERROR", payload: null });
+      return;
     }
-  };
 
-  // Register User
-  const register = async (formData) => {
     dispatch({ type: "USER_LOADING" });
     try {
-      const res = await axios.post("/api/auth/register", formData);
-      dispatch({
-        type: "REGISTER_SUCCESS",
-        payload: res.data,
-      });
-      toast.success(
-        `🎉 Welcome to SHMS, ${res.data.user.name}! Check your email for account details.`,
-        {
-          duration: 5000,
-        }
-      );
-      return { success: true, studentId: res.data.user.studentId };
-    } catch (error) {
-      const message = error.response?.data?.message || "Registration failed";
-      dispatch({
-        type: "REGISTER_FAIL",
-        payload: message,
-      });
-      toast.error(message);
-      return { success: false, message };
-    }
-  };
-
-  // Login User
-  const login = async (email, password) => {
-    dispatch({ type: "USER_LOADING" });
-    try {
-      const res = await axios.post("/api/auth/login", { email, password });
-
-      // Ensure user object has both id and _id for compatibility
+      const res = await axios.get("/api/auth/me");
       const userData = {
         ...res.data.user,
         id: res.data.user._id || res.data.user.id,
         _id: res.data.user._id || res.data.user.id,
       };
+      dispatch({ type: "USER_LOADED", payload: userData });
+    } catch (error) {
+      dispatch({
+        type: "AUTH_ERROR",
+        payload: error.response?.data?.message || "Failed to load user",
+      });
+    }
+  };
 
+  // Register user
+  const register = async (formData) => {
+    dispatch({ type: "USER_LOADING" });
+    try {
+      const res = await axios.post("/api/auth/register", formData);
+      dispatch({ type: "REGISTER_SUCCESS", payload: res.data });
+      toast.success(
+        `🎉 Welcome to SHMS, ${res.data.user.name}! Check your email for account details.`,
+        { duration: 5000 }
+      );
+      return { success: true, studentId: res.data.user.studentId };
+    } catch (error) {
+      const message = error.response?.data?.message || "Registration failed";
+      dispatch({ type: "REGISTER_FAIL", payload: message });
+      toast.error(message);
+      return { success: false, message };
+    }
+  };
+
+  // Login user
+  const login = async (email, password) => {
+    dispatch({ type: "USER_LOADING" });
+    try {
+      const res = await axios.post("/api/auth/login", { email, password });
+      const userData = {
+        ...res.data.user,
+        id: res.data.user._id || res.data.user.id,
+        _id: res.data.user._id || res.data.user.id,
+      };
       dispatch({
         type: "LOGIN_SUCCESS",
-        payload: {
-          ...res.data,
-          user: userData,
-        },
+        payload: { ...res.data, user: userData },
       });
       toast.success(`Welcome back, ${userData.name}! 👋`);
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || "Login failed";
-      dispatch({
-        type: "LOGIN_FAIL",
-        payload: message,
-      });
+      dispatch({ type: "LOGIN_FAIL", payload: message });
       toast.error(message);
       return { success: false, message };
     }
@@ -178,12 +145,9 @@ export const AuthProvider = ({ children }) => {
     toast.info("Logged out successfully. See you soon! 👋");
   };
 
-  // Update user profile
+  // Update user
   const updateUser = (userData) => {
-    dispatch({
-      type: "UPDATE_USER",
-      payload: userData,
-    });
+    dispatch({ type: "UPDATE_USER", payload: userData });
   };
 
   // Clear errors
@@ -191,44 +155,29 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: "CLEAR_ERRORS" });
   };
 
-  // Load user on mount
   useEffect(() => {
     loadUser();
   }, []);
 
-  const value = {
-    ...state,
-    register,
-    login,
-    logout,
-    loadUser,
-    updateUser,
-    clearErrors,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        ...state,
+        register,
+        login,
+        logout,
+        loadUser,
+        updateUser,
+        clearErrors,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
-};
-
-// In your component, add debugging
-const YourComponent = () => {
-  const { user } = useAuth();
-
-  useEffect(() => {
-    console.log("User from auth context:", user);
-    if (user && user._id) {
-      fetchUserQR();
-    } else {
-      console.error("User or user ID not available");
-    }
-  }, [user]);
-
-  // ... rest of component
 };
