@@ -37,7 +37,7 @@ const allowedOrigins = [
   "http://127.0.0.1:3001",
   "http://127.0.0.1:5173",
   "https://smart-hostel-management-system-puce.vercel.app", // Vercel frontend
-  "https://smart-hostel-management-system-jokk.vercel.app/", // Vercel Admin
+  "https://smart-hostel-management-system-jokk.vercel.app", // Vercel Admin
   "https://smart-hostel-management-system-vr2z.onrender.com", // Render Backend
 ];
 
