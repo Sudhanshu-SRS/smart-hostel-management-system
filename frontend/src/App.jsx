@@ -23,7 +23,7 @@ import Register from "./pages/Auth/Register";
 // Main Pages
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Rooms from "./pages/Rooms/Rooms";
-import Payments from "./pages/Payments/Payments";
+import Payments from "./pages/payments/Payments";
 import Complaints from "./pages/Complaints/Complaints";
 import Visitors from "./pages/Visitors/Visitors";
 import Users from "./pages/Users/Users";
