@@ -1,6 +1,6 @@
 // backend/routes/gateRoutes.js
 const express = require("express");
-const Gate = require("../models/Gate");
+const Gate = require("../models/gate");
 const EntryExitLog = require("../models/EntryExit");
 const User = require("../models/db");
 const { auth, authorize } = require("../middleware/authmiddleware");
