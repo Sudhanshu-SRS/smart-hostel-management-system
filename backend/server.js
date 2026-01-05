@@ -65,12 +65,14 @@ const io = socketIo(server, {
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      "http://localhost:3000", // Frontend
-      "http://localhost:3001", // Admin Panel
-      "http://localhost:5173", // Vite dev server
-      "http://127.0.0.1:3000", // Alternative frontend
-      "http://127.0.0.1:3001", // Alternative admin panel
-      "http://127.0.0.1:5173", // Alternative Vite
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:5173",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001",
+      "http://127.0.0.1:5173",
+      "https://smart-hostel-management-system-puce.vercel.app", // Deployed frontend
+      "https://smart-hostel-management-system-git-c674f7-sudhanshus-projects-c71364be.vercel.app", // Optional other preview URL
     ];
 
     // Allow requests with no origin (like mobile apps or curl requests)
