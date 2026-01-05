@@ -28,7 +28,7 @@ import ComplaintManagement from "./pages/Complaints/ComplaintManagement";
 import VisitorManagement from "./pages/Visitors/VisitorManagement";
 import Analytics from "./pages/Analytics/Analytics";
 import Settings from "./pages/Settings/Settings";
-import Reports from "./pages/Reports/Reports";
+// import Reports from "./pages/Reports/Reports";
 import EntryExitManagement from "./pages/EntryExit/EntryExitManagement";
 
 // Enhanced admin theme
