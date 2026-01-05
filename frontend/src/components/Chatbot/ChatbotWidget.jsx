@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 import "./ChatbotWidget.css";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 
 const ChatbotWidget = () => {
   const { token } = useAuth();
@@ -9,7 +12,7 @@ const ChatbotWidget = () => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hello! I'm your Hostel Management Assistant. How can I help you today?",
+      text: "Hello! I'm Kashish, your Hostel Management Assistant. How can I help you today?",
       sender: "bot",
       timestamp: new Date(),
     },
@@ -18,6 +21,13 @@ const ChatbotWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Auto-focus
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 300);
+    }
+  }, [isOpen]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -139,21 +149,22 @@ const ChatbotWidget = () => {
       {isOpen && (
         <div className="chatbot-window">
           <div className="chatbot-header">
-            <h3>Hostel Assistant</h3>
+            <h3>Kashish Assistant</h3>
             <div className="header-actions">
               <button
-                className="clear-btn"
+                className="icon-btn clear-btn"
                 onClick={clearHistory}
                 title="Clear chat"
               >
-                🗑️
+                <DeleteOutlineRoundedIcon fontSize="small" />
               </button>
+
               <button
-                className="close-btn"
+                className="icon-btn close-btn"
                 onClick={() => setIsOpen(false)}
                 title="Close chat"
               >
-                ✕
+                <CloseRoundedIcon fontSize="small" />
               </button>
             </div>
           </div>
@@ -203,7 +214,7 @@ const ChatbotWidget = () => {
               disabled={isLoading}
             />
             <button type="submit" disabled={isLoading || !inputValue.trim()}>
-              {isLoading ? "..." : "Send"}
+              {isLoading ? "..." : <SendRoundedIcon fontSize="small" />}
             </button>
           </form>
         </div>
