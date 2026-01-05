@@ -11,7 +11,7 @@ const rateLimit = require("express-rate-limit");
 // Load environment variables
 dotenv.config();
 
-// Import routes - Fix the import paths to match your file structure
+// Import routes
 const authRoutes = require("./routes/AuthR");
 const userRoutes = require("./routes/UserR");
 const roomRoutes = require("./routes/Room");
@@ -28,70 +28,25 @@ const chatbotRoutes = require("./routes/chatbotR");
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io setup
-const io = socketIo(server, {
-  cors: {
-    origin: function (origin, callback) {
-      const allowedOrigins = [
-        process.env.CLIENT_URL || "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:5173",
-      ];
+// ------------------ 1️⃣ EXPRESS CORS ------------------
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://127.0.0.1:5173",
+  "https://smart-hostel-management-system-puce.vercel.app", // Vercel frontend
+  "https://smart-hostel-management-system-jokk.vercel.app/", // Vercel Admin
+  "https://smart-hostel-management-system-vr2z.onrender.com", // Render Backend
+];
 
-      // In development, allow all localhost origins
-      if (
-        process.env.NODE_ENV === "development" &&
-        origin &&
-        origin.includes("localhost")
-      ) {
-        return callback(null, true);
-      }
-
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
-
-// CORS configuration - MUST be FIRST middleware (before helmet, compression, rate limiting)
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:5173",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:3001",
-      "http://127.0.0.1:5173",
-      "https://smart-hostel-management-system-puce.vercel.app", // Deployed frontend
-      "https://smart-hostel-management-system-git-c674f7-sudhanshus-projects-c71364be.vercel.app", // Optional other preview URL
-    ];
+    // Allow requests with no origin (curl, mobile apps)
+    if (!origin) return callback(null, true);
 
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    // In development, allow all 192.168.x.x and localhost origins
-    if (process.env.NODE_ENV === "development") {
-      if (
-        origin.includes("localhost") ||
-        origin.includes("192.168") ||
-        origin.includes("127.0.0.1")
-      ) {
-        return callback(null, true);
-      }
-    }
-
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.log(`⚠️ CORS Rejected origin: ${origin}`);
@@ -107,49 +62,35 @@ const corsOptions = {
     "Content-Type",
     "Accept",
     "Authorization",
-    "X-Admin-Mode", // For hardcoded admin requests
+    "X-Admin-Mode",
   ],
-  maxAge: 86400, // 24 hours
 };
-
-// Apply CORS BEFORE any other middleware
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // Handle preflight requests
 
-// Handle preflight requests explicitly for all routes
-app.options("*", cors(corsOptions));
-
-// Security middleware (AFTER CORS)
+// ------------------ 2️⃣ SECURITY ------------------
 app.use(helmet());
 app.use(compression());
 
-// Rate limiting - more lenient for development
+// ------------------ 3️⃣ RATE LIMITING ------------------
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Increased from 100 to 1000 for development
+  max: 1000,
   message: {
     success: false,
     message: "Too many requests from this IP, please try again later.",
   },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  skip: (req) => {
-    // Skip rate limiting for specific routes during development
-    if (process.env.NODE_ENV === "development") {
-      // Allow all GET requests to bypass rate limiting in dev
-      if (req.method === "GET") {
-        return true;
-      }
-    }
-    return false;
-  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === "development" && req.method === "GET",
 });
 app.use("/api/", limiter);
 
-// Body parsing middleware
+// ------------------ 4️⃣ BODY PARSING ------------------
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Debugging middleware
+// ------------------ 5️⃣ DEBUGGING ------------------
 app.use((req, res, next) => {
   console.log(`🌐 ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
   console.log(`🔑 Auth: ${req.headers.authorization ? "Present" : "Missing"}`);
@@ -157,25 +98,29 @@ app.use((req, res, next) => {
   next();
 });
 
-// Socket.io connection handling
+// ------------------ 6️⃣ SOCKET.IO ------------------
+const io = socketIo(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
 io.on("connection", (socket) => {
   console.log("👤 User connected:", socket.id);
 
-  // Join admin room for real-time updates
   socket.on("joinAdmin", (adminData) => {
     socket.join("admin");
     console.log(`👨‍💼 Admin ${adminData.name} joined admin room`);
   });
 
-  // Join student room
   socket.on("joinStudent", (studentData) => {
     socket.join(`student_${studentData.id}`);
     console.log(`🎓 Student ${studentData.name} joined their room`);
   });
 
-  // Real-time movement tracking
   socket.on("trackMovement", (data) => {
-    // Broadcast to admin panel
     io.to("admin").emit("liveMovement", {
       type: "movement_update",
       student: data.student,
@@ -193,11 +138,11 @@ io.on("connection", (socket) => {
 // Make io accessible to routes
 app.set("io", io);
 
-// Import and connect database
+// ------------------ 7️⃣ DATABASE ------------------
 const connectDB = require("./config/databaseC");
 connectDB();
 
-// Routes
+// ------------------ 8️⃣ ROUTES ------------------
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/rooms", roomRoutes);
@@ -211,7 +156,7 @@ app.use("/api/mess-feedback", messFeedbackRoutes);
 app.use("/api/vacation-requests", vacationRequestRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 
-// Health check route
+// Health check
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "OK",
@@ -221,7 +166,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Error handling middleware
+// ------------------ 9️⃣ ERROR HANDLING ------------------
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
@@ -242,6 +187,7 @@ app.use("*", (req, res) => {
   });
 });
 
+// ------------------ 10️⃣ SERVER START ------------------
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -10,7 +10,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import Reports from "./pages/Reports/Reports";
+import Reports from "./pages/Reportss/Reports";
 import { AuthProvider } from "./context/AuthContext";
 import { SocketProvider } from "./context/SocketContext";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
