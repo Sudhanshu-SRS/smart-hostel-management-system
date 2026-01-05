@@ -31,58 +31,49 @@ const ChatbotWidget = () => {
   const sendMessage = async (e) => {
     e.preventDefault();
 
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || isLoading) return; // LOCK
 
-    // Add user message to chat
+    setIsLoading(true); // LOCK immediately
+    const messageToSend = inputValue;
+    setInputValue("");
+
     const userMessage = {
       id: messages.length + 1,
-      text: inputValue,
+      text: messageToSend,
       sender: "user",
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
-    setIsLoading(true);
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
-      const response = await axios.post(
+      const { data } = await axios.post(
         `${apiUrl}/api/chatbot/message`,
-        {
-          message: inputValue,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
+        { message: messageToSend },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       const botMessage = {
         id: messages.length + 2,
-        text: response.data.response,
+        text: data.response?.response || data.response || "No response",
         sender: "bot",
         timestamp: new Date(),
       };
 
       setMessages((prev) => [...prev, botMessage]);
     } catch (error) {
-      console.error("Error sending message:", error);
-      const errorMessage = {
+      const botMessage = {
         id: messages.length + 2,
         text:
           error.response?.data?.message ||
-          "Sorry, I encountered an error. Please try again.",
+          "Sorry, something went wrong. Please try again.",
         sender: "bot",
         timestamp: new Date(),
         isError: true,
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, botMessage]);
     } finally {
-      setIsLoading(false);
-      inputRef.current?.focus();
+      setIsLoading(false); // Unlock
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Grid,
   Card,
@@ -58,11 +58,13 @@ const Dashboard = () => {
   const { user } = useAuth();
   const theme = useTheme();
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  // ✅ Moved inside component
+  const hasFetched = useRef(false);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardDataSafe = useCallback(async () => {
+    if (hasFetched.current || !user) return; // Prevent multiple calls
+    hasFetched.current = true;
+
     try {
       setLoading(true);
       const [statsRes, activitiesRes, notificationsRes] = await Promise.all([
@@ -74,13 +76,18 @@ const Dashboard = () => {
       setStats(statsRes.data.stats);
       setActivities(activitiesRes.data.activities);
       setNotifications(notificationsRes.data.notifications);
-    } catch (error) {
-      console.error("Dashboard fetch error:", error);
-      setError(error.response?.data?.message || "Failed to load dashboard");
+    } catch (err) {
+      console.error("Dashboard fetch error:", err);
+      setError(err.response?.data?.message || "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  // ✅ Only call safe fetch once
+  useEffect(() => {
+    fetchDashboardDataSafe();
+  }, [fetchDashboardDataSafe]);
 
   const getWelcomeMessage = () => {
     const hour = new Date().getHours();

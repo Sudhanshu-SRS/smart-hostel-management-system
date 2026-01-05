@@ -1,118 +1,177 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// System prompt for the hostel management chatbot
-const HOSTEL_SYSTEM_PROMPT = `You are a helpful and friendly chatbot assistant for a Hostel Management System. 
-Your role is to help hostel residents and staff with:
-- Room assignments and inquiries
-- Hostel rules and regulations
-- Visitor management
-- Payment and billing questions
-- Complaint lodging and tracking
-- Leave and vacation requests
-- Entry/exit procedures
-- Mess feedback and meal-related queries
-- General hostel information
-- Account management
-
-Always be polite, professional, and helpful. If you don't know something about the hostel system, 
-ask the user to contact the hostel management office. Provide concise and clear answers.`;
+const OpenAI = require("openai").default;
 
 class GeminiService {
   constructor() {
-    this.conversationHistory = new Map();
+    this.client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    this.conversationHistories = new Map();
+    this.lastRequestTime = new Map();
+    this.rateLimitCooldown = new Map();
+    this.MIN_REQUEST_INTERVAL = 500; // 500ms minimum between requests
+    this.COOLDOWN_PERIOD = 60000; // 1 minute cooldown on rate limit
   }
 
-  /**
-   * Chat with Gemini AI
-   * @param {string} userId - Unique user identifier
-   * @param {string} userMessage - User's message
-   * @returns {Promise<string>} - AI response
-   */
-  async chat(userId, userMessage) {
+  async chat(userId, message) {
     try {
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error("GEMINI_API_KEY is not configured");
+      // Check rate limiting
+      const now = Date.now();
+      const lastRequest = this.lastRequestTime.get(userId) || 0;
+      const cooldownUntil = this.rateLimitCooldown.get(userId) || 0;
+
+      if (now < cooldownUntil) {
+        return {
+          success: false,
+          response: this.getFallbackResponse(message),
+          rateLimit: true,
+        };
       }
 
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-      // Initialize conversation for this user if not exists
-      if (!this.conversationHistory.has(userId)) {
-        this.conversationHistory.set(userId, []);
+      if (now - lastRequest < this.MIN_REQUEST_INTERVAL) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.MIN_REQUEST_INTERVAL - (now - lastRequest))
+        );
       }
 
-      const history = this.conversationHistory.get(userId);
+      // Get or create conversation history
+      let history = this.conversationHistories.get(userId) || [];
 
-      // Build conversation history
-      const messages = [
-        {
-          role: "user",
-          parts: [{ text: HOSTEL_SYSTEM_PROMPT }],
-        },
-        {
-          role: "model",
-          parts: [
-            {
-              text: "I understand. I'm a hostel management assistant. How can I help you?",
-            },
-          ],
-        },
-        ...history,
-        {
-          role: "user",
-          parts: [{ text: userMessage }],
-        },
-      ];
-
-      // Start chat session
-      const chat = model.startChat({
-        history: messages.slice(0, -1), // All except the current message
-      });
-
-      const result = await chat.sendMessage(userMessage);
-      const response = await result.response;
-      const responseText = response.text();
-
-      // Store in history
+      // Add user message
       history.push({
         role: "user",
-        parts: [{ text: userMessage }],
-      });
-      history.push({
-        role: "model",
-        parts: [{ text: responseText }],
+        content: message,
       });
 
-      // Keep only last 20 messages to avoid memory issues
-      if (history.length > 40) {
-        history.splice(0, 20);
+      // Keep only last 10 messages to manage token usage
+      if (history.length > 20) {
+        history = history.slice(-20);
       }
 
-      return responseText;
+      // Call OpenAI API
+      const response = await this.client.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: `You are a helpful hostel management assistant. Help students with:
+- Room allocation and maintenance issues
+- Mess/food related queries
+- Entry/exit log problems
+- Complaint registration
+- Payment issues
+- Visitor management
+- Vacation requests
+- General hostel rules and policies
+
+Be concise, friendly, and helpful. If unsure, suggest contacting hostel management.`,
+          },
+          ...history,
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+      });
+
+      const assistantMessage =
+        response.choices[0].message.content ||
+        this.getFallbackResponse(message);
+
+      // Add assistant response to history
+      history.push({
+        role: "assistant",
+        content: assistantMessage,
+      });
+
+      // Update history
+      this.conversationHistories.set(userId, history);
+      this.lastRequestTime.set(userId, Date.now());
+
+      return {
+        success: true,
+        response: assistantMessage,
+      };
     } catch (error) {
-      console.error("Gemini Service Error:", error);
-      throw new Error(`Gemini API Error: ${error.message}`);
+      console.error("OpenAI API Error Details:", {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+        type: error.type,
+      });
+
+      // Check for various error types
+      const status = error.status || 0;
+
+      // Handle 429 (rate limit) or 429 in message
+      if (status === 429 || error.message.includes("quota")) {
+        console.warn(
+          `Rate limit/Quota exceeded for user ${userId}. Using fallback response.`
+        );
+        this.rateLimitCooldown.set(userId, Date.now() + this.COOLDOWN_PERIOD);
+        return {
+          success: false,
+          response: this.getFallbackResponse(message),
+          rateLimit: true,
+        };
+      }
+
+      // Handle auth errors (invalid key)
+      if (status === 401 || error.message.includes("API key")) {
+        console.error(
+          "OpenAI API Key Error: Check your OPENAI_API_KEY in .env"
+        );
+        return {
+          success: false,
+          response: this.getFallbackResponse(message),
+          error: "API configuration error - using fallback response",
+        };
+      }
+
+      // For any other error, return fallback
+      console.warn(`OpenAI API Error (${status}): Using fallback response`);
+      return {
+        success: false,
+        response: this.getFallbackResponse(message),
+        error: error.message,
+      };
     }
   }
 
-  /**
-   * Clear conversation history for a user
-   * @param {string} userId - User identifier
-   */
-  clearHistory(userId) {
-    this.conversationHistory.delete(userId);
+  getFallbackResponse(userMessage) {
+    const lowerMessage = userMessage.toLowerCase();
+
+    const responses = {
+      room: "For room-related issues, please visit the hostel office or contact your RA. You can also file a complaint through the system.",
+      mess: "For mess/food issues, contact the mess manager or file a feedback through the feedback system.",
+      payment:
+        "For payment issues, log in to your account to check payment status. Contact the hostel office for assistance.",
+      complaint:
+        "You can file a complaint through the Complaints section. Our team will review and respond shortly.",
+      visitor:
+        "For visitor management, log in and go to Visitors section to manage your visitor requests.",
+      entry:
+        "Entry/Exit logs are automatically tracked. Check your dashboard for recent activity. Contact hostel office if there are discrepancies.",
+      vacation:
+        "Submit vacation requests through the Vacation Request section. Approval usually takes 24-48 hours.",
+      rules:
+        "Hostel rules are available in the System Documentation. Contact hostel office for clarification.",
+      emergency:
+        "For emergencies, contact the hostel warden immediately. Use the complaint system for urgent non-emergency issues.",
+      gate: "Gate access information is managed by security. Contact the security office for access issues.",
+      lost: "For lost and found items, contact the hostel office. File a complaint if needed for tracking.",
+    };
+
+    for (const [key, response] of Object.entries(responses)) {
+      if (lowerMessage.includes(key)) {
+        return response;
+      }
+    }
+
+    return "I'm here to help! You can ask me about room allocation, mess, payments, complaints, visitors, entry/exit, vacation requests, or hostel rules. What would you like help with?";
   }
 
-  /**
-   * Get conversation summary
-   * @param {string} userId - User identifier
-   * @returns {Array} - Conversation history
-   */
-  getHistory(userId) {
-    return this.conversationHistory.get(userId) || [];
+  clearHistory(userId) {
+    this.conversationHistories.delete(userId);
+    this.lastRequestTime.delete(userId);
+    this.rateLimitCooldown.delete(userId);
   }
 }
 

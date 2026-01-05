@@ -21,9 +21,10 @@ router.post("/message", auth, async (req, res) => {
 
     const userId = req.user.id;
 
-    // Get response from Gemini
+    // Get response from Gemini (with built-in rate limit handling)
     const response = await geminiService.chat(userId, message);
 
+    // Always return 200 with response (even if fallback due to rate limit)
     res.status(200).json({
       success: true,
       message: message,
@@ -32,10 +33,16 @@ router.post("/message", auth, async (req, res) => {
     });
   } catch (error) {
     console.error("Chatbot Error:", error);
+
+    // Return user-friendly error messages
+    const errorMessage = error.message.includes("not configured")
+      ? "Chatbot service is not properly configured"
+      : "Our chatbot is temporarily unavailable. Please try again later or contact support.";
+
     res.status(500).json({
       success: false,
-      message: "Error communicating with chatbot",
-      error: error.message,
+      message: errorMessage,
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
