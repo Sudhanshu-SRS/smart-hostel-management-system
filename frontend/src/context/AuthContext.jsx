@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 
-// Base URL from environment
+// Base URL MUST include /api
 const API_URL = import.meta.env.VITE_API_URL;
 
 const AuthContext = createContext();
@@ -19,6 +19,7 @@ const authReducer = (state, action) => {
   switch (action.type) {
     case "USER_LOADING":
       return { ...state, loading: true, error: null };
+
     case "USER_LOADED":
       return {
         ...state,
@@ -27,6 +28,7 @@ const authReducer = (state, action) => {
         user: action.payload,
         error: null,
       };
+
     case "LOGIN_SUCCESS":
     case "REGISTER_SUCCESS":
       localStorage.setItem("shms_token", action.payload.token);
@@ -37,6 +39,7 @@ const authReducer = (state, action) => {
         loading: false,
         error: null,
       };
+
     case "AUTH_ERROR":
     case "LOGIN_FAIL":
     case "REGISTER_FAIL":
@@ -50,10 +53,13 @@ const authReducer = (state, action) => {
         user: null,
         error: action.payload,
       };
+
     case "CLEAR_ERRORS":
       return { ...state, error: null };
+
     case "UPDATE_USER":
       return { ...state, user: { ...state.user, ...action.payload } };
+
     default:
       return state;
   }
@@ -62,31 +68,34 @@ const authReducer = (state, action) => {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Set axios base URL and Authorization header
+  // Configure axios ONCE
   useEffect(() => {
     axios.defaults.baseURL = API_URL;
+
     if (state.token) {
-      axios.defaults.headers.common["Authorization"] = `Bearer ${state.token}`;
+      axios.defaults.headers.common.Authorization = `Bearer ${state.token}`;
     } else {
-      delete axios.defaults.headers.common["Authorization"];
+      delete axios.defaults.headers.common.Authorization;
     }
   }, [state.token]);
 
-  // Load user on app start
+  // Load user
   const loadUser = async () => {
     if (!state.token) {
-      dispatch({ type: "AUTH_ERROR", payload: null });
+      dispatch({ type: "AUTH_ERROR" });
       return;
     }
 
     dispatch({ type: "USER_LOADING" });
     try {
-      const res = await axios.get("/api/auth/me");
+      const res = await axios.get("/auth/me"); // ✅ FIXED
+
       const userData = {
         ...res.data.user,
         id: res.data.user._id || res.data.user.id,
         _id: res.data.user._id || res.data.user.id,
       };
+
       dispatch({ type: "USER_LOADED", payload: userData });
     } catch (error) {
       dispatch({
@@ -96,16 +105,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Register user
+  // Register
   const register = async (formData) => {
     dispatch({ type: "USER_LOADING" });
     try {
-      const res = await axios.post("/api/auth/register", formData);
+      const res = await axios.post("/auth/register", formData); // ✅ FIXED
+
       dispatch({ type: "REGISTER_SUCCESS", payload: res.data });
-      toast.success(
-        `🎉 Welcome to SHMS, ${res.data.user.name}! Check your email for account details.`,
-        { duration: 5000 }
-      );
+
+      toast.success(`🎉 Welcome to SHMS, ${res.data.user.name}!`);
       return { success: true, studentId: res.data.user.studentId };
     } catch (error) {
       const message = error.response?.data?.message || "Registration failed";
@@ -115,20 +123,23 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Login user
+  // Login
   const login = async (email, password) => {
     dispatch({ type: "USER_LOADING" });
     try {
-      const res = await axios.post("/api/auth/login", { email, password });
+      const res = await axios.post("/auth/login", { email, password }); // ✅ FIXED
+
       const userData = {
         ...res.data.user,
         id: res.data.user._id || res.data.user.id,
         _id: res.data.user._id || res.data.user.id,
       };
+
       dispatch({
         type: "LOGIN_SUCCESS",
         payload: { ...res.data, user: userData },
       });
+
       toast.success(`Welcome back, ${userData.name}! 👋`);
       return { success: true };
     } catch (error) {
@@ -139,21 +150,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout
   const logout = () => {
     dispatch({ type: "LOGOUT" });
-    toast.info("Logged out successfully. See you soon! 👋");
+    toast.info("Logged out successfully 👋");
   };
 
-  // Update user
   const updateUser = (userData) => {
     dispatch({ type: "UPDATE_USER", payload: userData });
   };
 
-  // Clear errors
-  const clearErrors = () => {
-    dispatch({ type: "CLEAR_ERRORS" });
-  };
+  const clearErrors = () => dispatch({ type: "CLEAR_ERRORS" });
 
   useEffect(() => {
     loadUser();
