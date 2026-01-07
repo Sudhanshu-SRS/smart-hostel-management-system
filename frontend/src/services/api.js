@@ -1,8 +1,12 @@
 import axios from "axios";
 
-// Base API configuration - make sure this matches your backend
+// ✅ Dynamic base URL (Vite-safe)
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+// Base API configuration
 const api = axios.create({
-  baseURL: "http://localhost:5000/api", // Ensure this matches your backend port
+  baseURL: API_BASE_URL,
   timeout: 10000,
 });
 
@@ -15,9 +19,7 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor
@@ -32,7 +34,9 @@ api.interceptors.response.use(
   }
 );
 
-// Auth API
+/* =========================
+   AUTH API
+========================= */
 export const authAPI = {
   login: (credentials) => api.post("/auth/login", credentials),
   register: (userData) => api.post("/auth/register", userData),
@@ -40,7 +44,9 @@ export const authAPI = {
   logout: () => api.post("/auth/logout"),
 };
 
-// Dashboard API
+/* =========================
+   DASHBOARD API
+========================= */
 export const dashboardAPI = {
   getStats: () => api.get("/dashboard/stats"),
   getRecentActivities: (limit = 10) =>
@@ -48,7 +54,9 @@ export const dashboardAPI = {
   getNotifications: () => api.get("/dashboard/notifications"),
 };
 
-// Rooms API
+/* =========================
+   ROOMS API
+========================= */
 export const roomsAPI = {
   getRooms: (params = {}) => api.get("/rooms", { params }),
   getRoom: (id) => api.get(`/rooms/${id}`),
@@ -60,7 +68,9 @@ export const roomsAPI = {
   getOccupancyStats: () => api.get("/rooms/stats/occupancy"),
 };
 
-// Payments API
+/* =========================
+   PAYMENTS API
+========================= */
 export const paymentsAPI = {
   getPayments: (params = {}) => api.get("/payments", { params }),
   getPayment: (id) => api.get(`/payments/${id}`),
@@ -80,43 +90,43 @@ export const paymentsAPI = {
     api.get("/payments/analytics", { params }),
 };
 
-// Complaints API
+/* =========================
+   COMPLAINTS API
+========================= */
 export const complaintsAPI = {
   getComplaints: (params = {}) => api.get("/complaints", { params }),
   getComplaint: (id) => api.get(`/complaints/${id}`),
-  createComplaint: (complaintData) => api.post("/complaints", complaintData),
-  updateComplaint: (id, complaintData) =>
-    api.put(`/complaints/${id}`, complaintData),
-  assignComplaint: (id, assignData) =>
-    api.post(`/complaints/${id}/assign`, assignData),
-  addComment: (id, commentData) =>
-    api.post(`/complaints/${id}/comments`, commentData),
-  resolveComplaint: (id, resolutionData) =>
-    api.post(`/complaints/${id}/resolve`, resolutionData),
-  addFeedback: (id, feedbackData) =>
-    api.post(`/complaints/${id}/feedback`, feedbackData),
+  createComplaint: (data) => api.post("/complaints", data),
+  updateComplaint: (id, data) => api.put(`/complaints/${id}`, data),
+  assignComplaint: (id, data) => api.post(`/complaints/${id}/assign`, data),
+  addComment: (id, data) => api.post(`/complaints/${id}/comments`, data),
+  resolveComplaint: (id, data) => api.post(`/complaints/${id}/resolve`, data),
+  addFeedback: (id, data) => api.post(`/complaints/${id}/feedback`, data),
   getComplaintStats: () => api.get("/complaints/stats/summary"),
 };
 
-// Visitors API
+/* =========================
+   VISITORS API
+========================= */
 export const visitorsAPI = {
   getVisitors: (params = {}) => api.get("/visitors", { params }),
   getVisitor: (id) => api.get(`/visitors/${id}`),
-  registerVisitor: (visitorData) => api.post("/visitors", visitorData),
+  registerVisitor: (data) => api.post("/visitors", data),
   approveVisitor: (id) => api.put(`/visitors/${id}/approve`),
-  rejectVisitor: (id, rejectionData) =>
-    api.put(`/visitors/${id}/reject`, rejectionData),
+  rejectVisitor: (id, data) => api.put(`/visitors/${id}/reject`, data),
   checkoutVisitor: (id) => api.put(`/visitors/${id}/checkout`),
   getActiveCount: () => api.get("/visitors/active/count"),
   getVisitorStats: () => api.get("/visitors/stats/summary"),
   checkOverstay: () => api.post("/visitors/check-overstay"),
 };
 
-// Users API
+/* =========================
+   USERS API
+========================= */
 export const usersAPI = {
   getUsers: (params = {}) => api.get("/users", { params }),
   getUser: (id) => api.get(`/users/${id}`),
-  updateUser: (id, userData) => api.put(`/users/${id}`, userData),
+  updateUser: (id, data) => api.put(`/users/${id}`, data),
   uploadAvatar: (id, formData) =>
     api.post(`/users/${id}/upload-avatar`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -125,24 +135,24 @@ export const usersAPI = {
     api.post(`/users/${id}/upload-id-proof`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
-  changePassword: (id, passwordData) =>
-    api.put(`/users/${id}/change-password`, passwordData),
+  changePassword: (id, data) => api.put(`/users/${id}/change-password`, data),
   toggleStatus: (id) => api.put(`/users/${id}/toggle-status`),
   deleteUser: (id) => api.delete(`/users/${id}`),
   getUserStats: () => api.get("/users/stats/summary"),
 };
 
-// Gate API - Fix the getStudentQR function
+/* =========================
+   GATE API
+========================= */
 export const gateAPI = {
   getGates: (params = {}) => api.get("/gates", { params }),
   getGate: (id) => api.get(`/gates/${id}`),
-  createGate: (gateData) => api.post("/gates", gateData),
-  updateGate: (id, gateData) => api.put(`/gates/${id}`, gateData),
+  createGate: (data) => api.post("/gates", data),
+  updateGate: (id, data) => api.put(`/gates/${id}`, data),
   deleteGate: (id) => api.delete(`/gates/${id}`),
-  scanStudentQR: (scanData) => api.post("/gates/scan-student-qr", scanData),
+  scanStudentQR: (data) => api.post("/gates/scan-student-qr", data),
   getEntryExitLogs: (params = {}) =>
     api.get("/gates/entry-exit-logs", { params }),
-  // Enhanced student QR function with better error handling
   getStudentQR: (studentId) => {
     if (!studentId || studentId === "undefined" || studentId === "null") {
       return Promise.reject(new Error("Valid student ID is required"));
@@ -152,9 +162,11 @@ export const gateAPI = {
   getGateStats: () => api.get("/gates/stats"),
 };
 
-// Mess Feedback API
+/* =========================
+   MESS FEEDBACK API
+========================= */
 export const messFeedbackAPI = {
-  submitFeedback: (feedbackData) => api.post("/mess-feedback", feedbackData),
+  submitFeedback: (data) => api.post("/mess-feedback", data),
   getMyFeedback: (params = {}) =>
     api.get("/mess-feedback/my-feedback", { params }),
   getAllFeedback: (params = {}) => api.get("/mess-feedback", { params }),
@@ -163,26 +175,30 @@ export const messFeedbackAPI = {
   checkDailySubmission: () => api.get("/mess-feedback/check-daily-submission"),
 };
 
-// Entry/Exit API
+/* =========================
+   ENTRY / EXIT API
+========================= */
 export const entryExitAPI = {
   getMyHistory: (params = {}) => api.get("/gates/entry-exit-logs", { params }),
   getAllHistory: (params = {}) => api.get("/gates/entry-exit-logs", { params }),
   getStats: () => api.get("/gates/stats"),
 };
 
-// Vacation Request API
+/* =========================
+   VACATION REQUEST API
+========================= */
 export const vacationRequestAPI = {
   createRequest: (reason) => api.post("/vacation-requests", { reason }),
   getMyRequest: () => api.get("/vacation-requests/my-request"),
   getPendingRequests: (params = {}) =>
     api.get("/vacation-requests/pending", { params }),
   getAllRequests: (params = {}) => api.get("/vacation-requests", { params }),
-  approveByAdmin: (requestId, comments) =>
-    api.post(`/vacation-requests/${requestId}/approve-admin`, { comments }),
-  approveByWarden: (requestId, comments) =>
-    api.post(`/vacation-requests/${requestId}/approve-warden`, { comments }),
-  rejectRequest: (requestId, reason) =>
-    api.post(`/vacation-requests/${requestId}/reject`, { reason }),
+  approveByAdmin: (id, comments) =>
+    api.post(`/vacation-requests/${id}/approve-admin`, { comments }),
+  approveByWarden: (id, comments) =>
+    api.post(`/vacation-requests/${id}/approve-warden`, { comments }),
+  rejectRequest: (id, reason) =>
+    api.post(`/vacation-requests/${id}/reject`, { reason }),
 };
 
 export default api;

@@ -5,6 +5,12 @@ import { toast } from "react-toastify";
 
 const SocketContext = createContext();
 
+// 🔹 Dynamic socket URL from VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL;
+const SOCKET_URL = API_URL
+  ? API_URL.replace(/\/api\/?$/, "")
+  : "http://localhost:5000";
+
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -13,7 +19,7 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      const newSocket = io("http://localhost:5000", {
+      const newSocket = io(SOCKET_URL, {
         autoConnect: true,
         reconnection: true,
         reconnectionAttempts: 5,
@@ -24,7 +30,7 @@ export const SocketProvider = ({ children }) => {
         console.log("✅ Connected to SHMS server");
         newSocket.emit("joinRoom", `user_${user.id}`);
 
-        // Join role-based rooms for real-time notifications
+        // Role-based rooms
         if (user.role === "admin") {
           newSocket.emit("joinRoom", "admin");
         } else if (user.role === "warden") {
@@ -32,9 +38,8 @@ export const SocketProvider = ({ children }) => {
         }
       });
 
-      // Real-time notifications based on user role (following your abstract)
+      // Student notifications
       if (user.role === "student") {
-        // Student-specific real-time notifications
         newSocket.on("paymentCompleted", (payment) => {
           if (payment.userId === user.id) {
             toast.success("💰 Payment completed successfully!");
@@ -44,7 +49,7 @@ export const SocketProvider = ({ children }) => {
         newSocket.on("complaintUpdated", (complaint) => {
           if (complaint.user._id === user.id) {
             toast.info(
-              `📋 Your complaint "${complaint.title}" has been updated to: ${complaint.status}`
+              `📋 Your complaint "${complaint.title}" updated to: ${complaint.status}`
             );
           }
         });
@@ -60,72 +65,58 @@ export const SocketProvider = ({ children }) => {
         newSocket.on("visitorRejected", (visitor) => {
           if (visitor.visitingStudent._id === user.id) {
             toast.error(
-              `❌ Visitor ${visitor.name} was rejected: ${visitor.rejectionReason}`
+              `❌ Visitor ${visitor.name} rejected: ${visitor.rejectionReason}`
             );
           }
         });
 
         newSocket.on("roomUpdated", (room) => {
-          if (room.occupants.some((occupant) => occupant._id === user.id)) {
+          if (room.occupants.some((o) => o._id === user.id)) {
             toast.info("🏠 Your room information has been updated");
           }
         });
       } else {
-        // Staff notifications (Admin/Warden) - following your abstract requirements
+        // Admin / Warden notifications
         newSocket.on("newComplaint", (complaint) => {
           toast.info(
             `🚨 New ${complaint.priority} complaint: ${complaint.title}`,
-            {
-              onClick: () => (window.location.href = "/complaints"),
-            }
+            { onClick: () => (window.location.href = "/complaints") }
           );
         });
 
         newSocket.on("newVisitorRegistration", (visitor) => {
           toast.info(
-            `👤 New visitor registration: ${visitor.name} (Room: ${visitor.room.roomNumber})`,
-            {
-              onClick: () => (window.location.href = "/visitors"),
-            }
+            `👤 New visitor: ${visitor.name} (Room ${visitor.room.roomNumber})`,
+            { onClick: () => (window.location.href = "/visitors") }
           );
         });
 
         newSocket.on("urgentComplaint", (complaint) => {
-          toast.error(
-            `🚨 URGENT COMPLAINT: ${complaint.title} - Immediate attention required!`,
-            {
-              onClick: () => (window.location.href = `/complaints`),
-              autoClose: false,
-            }
-          );
+          toast.error(`🚨 URGENT: ${complaint.title}`, { autoClose: false });
         });
 
         newSocket.on("paymentOverdue", (payment) => {
           toast.warning(
             `⏰ Payment overdue: ${payment.user.name} - ₹${payment.amount}`,
-            {
-              onClick: () => (window.location.href = "/payments"),
-            }
+            { onClick: () => (window.location.href = "/payments") }
           );
         });
 
         newSocket.on("visitorOverstayed", (visitor) => {
           toast.warning(
-            `⚠️ Visitor overstayed: ${visitor.name} at Room ${visitor.room.roomNumber}`,
-            {
-              onClick: () => (window.location.href = "/visitors"),
-            }
+            `⚠️ Visitor overstayed: ${visitor.name} (Room ${visitor.room.roomNumber})`,
+            { onClick: () => (window.location.href = "/visitors") }
           );
         });
       }
 
-      // System-wide notifications
-      newSocket.on("systemAnnouncement", (announcement) => {
-        toast.info(`📢 System: ${announcement.message}`);
+      // System-wide
+      newSocket.on("systemAnnouncement", (a) => {
+        toast.info(`📢 System: ${a.message}`);
       });
 
-      newSocket.on("maintenanceAlert", (alert) => {
-        toast.warning(`🔧 Maintenance: ${alert.message}`);
+      newSocket.on("maintenanceAlert", (a) => {
+        toast.warning(`🔧 Maintenance: ${a.message}`);
       });
 
       newSocket.on("disconnect", () => {
@@ -141,19 +132,12 @@ export const SocketProvider = ({ children }) => {
   }, [isAuthenticated, user]);
 
   const emitNotification = (event, data) => {
-    if (socket) {
-      socket.emit(event, data);
-    }
+    socket?.emit(event, data);
   };
 
   return (
     <SocketContext.Provider
-      value={{
-        socket,
-        onlineUsers,
-        notifications,
-        emitNotification,
-      }}
+      value={{ socket, onlineUsers, notifications, emitNotification }}
     >
       {children}
     </SocketContext.Provider>
