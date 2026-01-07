@@ -6,6 +6,12 @@ import { toast } from "react-toastify";
 
 const SocketContext = createContext();
 
+// 🔹 Make socket URL dynamic from VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL;
+const SOCKET_URL = API_URL
+  ? API_URL.replace(/\/api\/?$/, "")
+  : "http://localhost:5000";
+
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -15,7 +21,7 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated && user && ["admin", "warden"].includes(user.role)) {
-      const newSocket = io("http://localhost:5000", {
+      const newSocket = io(SOCKET_URL, {
         autoConnect: true,
         reconnection: true,
         reconnectionAttempts: 5,
