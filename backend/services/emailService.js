@@ -5,14 +5,16 @@ class EmailService {
  constructor() {
     this.validateEnv();
 
-    this.transporter = nodemailer.createTransport({
+   this.transporter = nodemailer.createTransport({
   host: "smtp-relay.brevo.com",
-  port: 587,
+  port: 2525,
   secure: false,
   auth: {
     user: process.env.BREVO_USER,
     pass: process.env.BREVO_PASS,
   },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
 });
     this.verifyConnection();
   }
@@ -25,14 +27,15 @@ class EmailService {
   }
 
   // ✅ VERIFY SMTP
-  async verifyConnection() {
-    try {
-      await this.transporter.verify();
-      console.log("✅ SMTP Server Ready");
-    } catch (err) {
-      console.error("❌ SMTP Connection Failed:", err.message);
-    }
+ async verifyConnection() {
+  try {
+    console.log("🔍 Checking Brevo SMTP...");
+    await this.transporter.verify();
+    console.log("✅ Brevo SMTP Connected");
+  } catch (err) {
+    console.error("❌ SMTP ERROR FULL:", err);
   }
+}
   async sendWelcomeEmail(user) {
     try {
       const mailOptions = {
