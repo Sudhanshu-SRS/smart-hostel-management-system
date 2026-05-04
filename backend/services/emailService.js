@@ -2,16 +2,41 @@
 const nodemailer = require("nodemailer");
 
 class EmailService {
-  constructor() {
+ constructor() {
+    this.validateEnv();
+
     this.transporter = nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
+
+    this.verifyConnection();
   }
 
+  // ✅ ENV VALIDATION
+  validateEnv() {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn("⚠️ Email env variables missing");
+    }
+  }
+
+  // ✅ VERIFY SMTP
+  async verifyConnection() {
+    try {
+      await this.transporter.verify();
+      console.log("✅ SMTP Server Ready");
+    } catch (err) {
+      console.error("❌ SMTP Connection Failed:", err.message);
+    }
+  }
   async sendWelcomeEmail(user) {
     try {
       const mailOptions = {
